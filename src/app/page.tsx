@@ -1,4 +1,4 @@
-import Link from "next/link";
+import SiteHeader from "@/components/SiteHeader";
 
 const HERO_IMAGE =
   "https://media.cnn.com/api/v1/images/stellar/prod/221219105607-messi-crowd-world-cup-121822.jpg?q=w_3000,c_fill";
@@ -56,43 +56,7 @@ function PitchMarkings() {
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[var(--background)]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={MERQUE_LOGO} alt="Merquellantas" className="h-9 w-auto" />
-            <span className="hidden h-6 w-px bg-[var(--line)] sm:block" />
-            <span className="hidden text-sm font-semibold tracking-wide sm:inline">
-              Polla Mundialista
-            </span>
-          </Link>
-          <nav className="hidden gap-8 text-sm font-medium text-[var(--foreground-soft)] md:flex">
-            <a href="#participar" className="hover:text-[var(--brand)]">
-              Cómo participar
-            </a>
-            <a href="#puntuacion" className="hover:text-[var(--brand)]">
-              Puntuación
-            </a>
-            <a href="#asesor" className="hover:text-[var(--brand)]">
-              Habla con tu asesor
-            </a>
-          </nav>
-          <div className="hidden items-center gap-3 md:flex">
-            <Link
-              href="/login"
-              className="text-sm font-semibold text-[var(--foreground)] hover:text-[var(--brand)]"
-            >
-              Iniciar sesión
-            </Link>
-            <a
-              href="#asesor"
-              className="rounded-sm bg-[var(--brand)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[var(--brand-dark)]"
-            >
-              Quiero participar
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="flex-1">
         {/* HERO */}
