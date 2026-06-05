@@ -2,29 +2,26 @@ import "server-only";
 import type { KnockoutPick, MatchDoc, PredictionDoc } from "./types";
 
 export const POINTS = {
-  GROUP_OUTCOME: 10,
-  GROUP_EXACT: 20,
-  GROUP_UNIQUE_EXACT: 40,
-  R16_WINNER: 20,
-  QF_WINNER: 30,
-  SF_WINNER: 40,
-  RUNNER_UP: 50,
-  CHAMPION: 60,
+  GROUP_EXACT: 50,
+  GROUP_OUTCOME: 30,
+  GROUP_GOAL_DIFF: 20,
+  FINAL_BOTH: 350,
+  CHAMPION: 300,
+  RUNNER_UP: 250,
 } as const;
 
 export type ScoreBreakdown = {
   group: {
-    outcomes: number;
     exact: number;
-    uniqueExact: number;
+    outcomes: number;
+    goalDiff: number;
     points: number;
   };
-  knockout: {
-    r16: number;
-    qf: number;
-    sf: number;
-    runnerUp: number;
-    champion: number;
+  final: {
+    /** Both champion and runner-up right (350, replaces the others). */
+    both: boolean;
+    champion: boolean;
+    runnerUp: boolean;
     points: number;
   };
   total: number;
@@ -124,8 +121,8 @@ function pickedWinnerCode(p: KnockoutPick): string | null {
 
 function emptyBreakdown(): ScoreBreakdown {
   return {
-    group: { outcomes: 0, exact: 0, uniqueExact: 0, points: 0 },
-    knockout: { r16: 0, qf: 0, sf: 0, runnerUp: 0, champion: 0, points: 0 },
+    group: { exact: 0, outcomes: 0, goalDiff: 0, points: 0 },
+    final: { both: false, champion: false, runnerUp: false, points: 0 },
     total: 0,
   };
 }
@@ -134,6 +131,10 @@ export type AttemptScore = {
   breakdown: ScoreBreakdown;
   /** Points earned per finished group match (0 when the pick missed). */
   groupPointsByMatch: Record<string, number>;
+  /**
+   * Correct knockout picks, kept for the results comparison view.
+   * Only the final (champion/runner-up) awards points.
+   */
   knockoutHits: {
     r16: string[];
     qf: string[];
@@ -158,19 +159,6 @@ export function scorePredictions(
   const groupReal = finishedGroupMatches(matches);
   const knockReal = knockoutWinnersByStage(matches);
 
-  const exactHits = new Map<string, string[]>();
-  for (const p of predictions) {
-    for (const m of groupReal) {
-      const pick = p.groupScores[m.id];
-      if (!pick) continue;
-      if (pick.home === m.home && pick.away === m.away) {
-        const arr = exactHits.get(m.id) ?? [];
-        arr.push(p._id);
-        exactHits.set(m.id, arr);
-      }
-    }
-  }
-
   const out = new Map<string, AttemptScore>();
   for (const p of predictions) {
     const score = emptyAttemptScore();
@@ -180,55 +168,44 @@ export function scorePredictions(
       const pick = p.groupScores[m.id];
       if (!pick) continue;
       if (pick.home === m.home && pick.away === m.away) {
-        const hits = exactHits.get(m.id) ?? [];
-        if (hits.length === 1 && hits[0] === p._id) {
-          br.group.uniqueExact += 1;
-          br.group.points += POINTS.GROUP_UNIQUE_EXACT;
-          score.groupPointsByMatch[m.id] = POINTS.GROUP_UNIQUE_EXACT;
-        } else {
-          br.group.exact += 1;
-          br.group.points += POINTS.GROUP_EXACT;
-          score.groupPointsByMatch[m.id] = POINTS.GROUP_EXACT;
-        }
+        br.group.exact += 1;
+        br.group.points += POINTS.GROUP_EXACT;
+        score.groupPointsByMatch[m.id] = POINTS.GROUP_EXACT;
       } else if (outcome(pick.home, pick.away) === outcome(m.home, m.away)) {
         br.group.outcomes += 1;
         br.group.points += POINTS.GROUP_OUTCOME;
         score.groupPointsByMatch[m.id] = POINTS.GROUP_OUTCOME;
+      } else if (
+        Math.abs(pick.home - pick.away) === Math.abs(m.home - m.away)
+      ) {
+        // Missed the winner but nailed the goal margin
+        br.group.goalDiff += 1;
+        br.group.points += POINTS.GROUP_GOAL_DIFF;
+        score.groupPointsByMatch[m.id] = POINTS.GROUP_GOAL_DIFF;
       } else {
         score.groupPointsByMatch[m.id] = 0;
       }
     }
 
+    // Knockout hits carry no points anymore, but the results page still
+    // shows which picks matched the real bracket.
     for (const pick of p.knockout.r16) {
       const w = pickedWinnerCode(pick);
-      if (w && knockReal.r16.has(w)) {
-        br.knockout.r16 += 1;
-        br.knockout.points += POINTS.R16_WINNER;
-        score.knockoutHits.r16.push(pick.matchId);
-      }
+      if (w && knockReal.r16.has(w)) score.knockoutHits.r16.push(pick.matchId);
     }
     for (const pick of p.knockout.qf) {
       const w = pickedWinnerCode(pick);
-      if (w && knockReal.qf.has(w)) {
-        br.knockout.qf += 1;
-        br.knockout.points += POINTS.QF_WINNER;
-        score.knockoutHits.qf.push(pick.matchId);
-      }
+      if (w && knockReal.qf.has(w)) score.knockoutHits.qf.push(pick.matchId);
     }
     for (const pick of p.knockout.sf) {
       const w = pickedWinnerCode(pick);
-      if (w && knockReal.sf.has(w)) {
-        br.knockout.sf += 1;
-        br.knockout.points += POINTS.SF_WINNER;
-        score.knockoutHits.sf.push(pick.matchId);
-      }
+      if (w && knockReal.sf.has(w)) score.knockoutHits.sf.push(pick.matchId);
     }
 
-    if (knockReal.champion && p.champion?.code === knockReal.champion) {
-      br.knockout.champion = 1;
-      br.knockout.points += POINTS.CHAMPION;
-      score.knockoutHits.champion = true;
-    }
+    const championHit = Boolean(
+      knockReal.champion && p.champion?.code === knockReal.champion,
+    );
+    let runnerUpHit = false;
     if (knockReal.runnerUp && p.knockout.final) {
       const finalPick = p.knockout.final;
       const winner = pickedWinnerCode(finalPick);
@@ -238,14 +215,23 @@ export function scorePredictions(
           : winner === finalPick.awayTeamCode
             ? finalPick.homeTeamCode
             : null;
-      if (loser && loser === knockReal.runnerUp) {
-        br.knockout.runnerUp = 1;
-        br.knockout.points += POINTS.RUNNER_UP;
-        score.knockoutHits.runnerUp = true;
-      }
+      runnerUpHit = Boolean(loser && loser === knockReal.runnerUp);
     }
 
-    br.total = br.group.points + br.knockout.points;
+    br.final.champion = championHit;
+    br.final.runnerUp = runnerUpHit;
+    if (championHit && runnerUpHit) {
+      br.final.both = true;
+      br.final.points = POINTS.FINAL_BOTH;
+    } else if (championHit) {
+      br.final.points = POINTS.CHAMPION;
+    } else if (runnerUpHit) {
+      br.final.points = POINTS.RUNNER_UP;
+    }
+    score.knockoutHits.champion = championHit;
+    score.knockoutHits.runnerUp = runnerUpHit;
+
+    br.total = br.group.points + br.final.points;
     out.set(p._id, score);
   }
   return out;

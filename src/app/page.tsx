@@ -26,17 +26,15 @@ const partners = [
 ];
 
 const groupRows = [
-  { phase: "Marcador exacto", points: 20 },
-  { phase: "Solo el ganador", points: 10 },
-  { phase: "Único en clavar el marcador", points: 40 },
+  { phase: "Marcador exacto", points: 50 },
+  { phase: "Acertar el resultado (ganador o empate)", points: 30 },
+  { phase: "Acertar la diferencia de gol", points: 20 },
 ];
 
 const knockoutRows = [
-  { phase: "Ganador en Octavos", points: 20 },
-  { phase: "Ganador en Cuartos", points: 30 },
-  { phase: "Ganador en Semifinal", points: 40 },
-  { phase: "Subcampeón", points: 50 },
-  { phase: "Campeón", points: 60 },
+  { phase: "Campeón y subcampeón", points: 350 },
+  { phase: "Campeón", points: 300 },
+  { phase: "Subcampeón", points: 250 },
 ];
 
 function PitchMarkings() {
@@ -269,17 +267,17 @@ export default function Home() {
                   </span>
                 </h2>
                 <p className="mt-6 max-w-md text-white/70">
-                  El sistema premia la constancia en grupos y, sobre todo, las
-                  jugadas de riesgo. Clavar un marcador que nadie más acertó
-                  vale más que cualquier ronda inicial.
+                  El sistema premia la precisión en cada partido y, sobre
+                  todo, atinarle a la final. Clavar campeón y subcampeón vale
+                  más que cualquier otra jugada.
                 </p>
                 <div className="mt-8 inline-flex items-center gap-3 border border-[var(--brand)]/40 bg-[var(--brand)]/10 px-4 py-3">
                   <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--brand)]">
                     Bono
                   </span>
                   <span className="text-sm">
-                    Único en clavar el marcador →{" "}
-                    <strong className="text-[var(--brand)]">+40 pts</strong>
+                    Campeón y subcampeón →{" "}
+                    <strong className="text-[var(--brand)]">+350 pts</strong>
                   </span>
                 </div>
               </div>
@@ -288,10 +286,10 @@ export default function Home() {
                 <div>
                   <div className="flex items-baseline justify-between border-b border-white/20 pb-3">
                     <h3 className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-white/80">
-                      Fase de grupos
+                      Por partido
                     </h3>
                     <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/40">
-                      48 partidos
+                      Fase de grupos
                     </span>
                   </div>
                   <dl className="mt-2 divide-y divide-white/10">
@@ -312,10 +310,10 @@ export default function Home() {
                 <div>
                   <div className="flex items-baseline justify-between border-b border-white/20 pb-3">
                     <h3 className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-white/80">
-                      Fase final
+                      Campeón y subcampeón
                     </h3>
                     <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/40">
-                      Octavos → Campeón
+                      Final
                     </span>
                   </div>
                   <dl className="mt-2 divide-y divide-white/10">

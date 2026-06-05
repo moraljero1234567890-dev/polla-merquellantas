@@ -24,17 +24,15 @@ type LeaderboardRow = {
   totalAttempts: number;
   breakdown: {
     group: {
-      outcomes: number;
       exact: number;
-      uniqueExact: number;
+      outcomes: number;
+      goalDiff: number;
       points: number;
     };
-    knockout: {
-      r16: number;
-      qf: number;
-      sf: number;
-      runnerUp: number;
-      champion: number;
+    final: {
+      both: boolean;
+      champion: boolean;
+      runnerUp: boolean;
       points: number;
     };
     total: number;
@@ -517,8 +515,8 @@ export default function AdminPage() {
                     <th className="py-2 pr-3">#</th>
                     <th className="py-2 pr-3">Participante</th>
                     <th className="py-2 pr-3">Intento</th>
-                    <th className="py-2 pr-3 text-right">Grupos</th>
-                    <th className="py-2 pr-3 text-right">Elim.</th>
+                    <th className="py-2 pr-3 text-right">Partidos</th>
+                    <th className="py-2 pr-3 text-right">Final</th>
                     <th className="py-2 pr-3 text-right">Total</th>
                   </tr>
                 </thead>
@@ -553,21 +551,23 @@ export default function AdminPage() {
                             {row.breakdown.group.points}
                           </div>
                           <div className="font-mono text-[10px] text-[var(--foreground-muted)]">
-                            {row.breakdown.group.uniqueExact}u ·{" "}
                             {row.breakdown.group.exact}e ·{" "}
-                            {row.breakdown.group.outcomes}g
+                            {row.breakdown.group.outcomes}r ·{" "}
+                            {row.breakdown.group.goalDiff}d
                           </div>
                         </td>
                         <td className="py-3 pr-3 text-right">
                           <div className="font-mono font-bold tabular-nums">
-                            {row.breakdown.knockout.points}
+                            {row.breakdown.final.points}
                           </div>
                           <div className="font-mono text-[10px] text-[var(--foreground-muted)]">
-                            {row.breakdown.knockout.r16}·
-                            {row.breakdown.knockout.qf}·
-                            {row.breakdown.knockout.sf}
-                            {row.breakdown.knockout.runnerUp ? " ·sub" : ""}
-                            {row.breakdown.knockout.champion ? " ·camp" : ""}
+                            {row.breakdown.final.both
+                              ? "camp + sub"
+                              : row.breakdown.final.champion
+                                ? "camp"
+                                : row.breakdown.final.runnerUp
+                                  ? "sub"
+                                  : "—"}
                           </div>
                         </td>
                         <td className="py-3 pr-3 text-right font-mono text-lg font-black tabular-nums">
@@ -579,8 +579,8 @@ export default function AdminPage() {
                 </tbody>
               </table>
               <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--foreground-muted)]">
-                Grupos: u = únicos, e = exactos, g = solo ganador · Elim: r16 ·
-                cuartos · semis (+ sub / campeón)
+                Partidos: e = exactos (50), r = resultado (30), d = diferencia
+                de gol (20) · Final: campeón y sub 350 · campeón 300 · sub 250
               </p>
             </div>
           )}

@@ -24,11 +24,6 @@ const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
   FINAL: "Final",
 };
 
-const STAGE_POINTS: Partial<Record<KnockoutPick["stage"], number>> = {
-  ROUND_OF_16: 20,
-  QUARTER_FINALS: 30,
-  SEMI_FINALS: 40,
-};
 
 type MatchWithScore = ApiMatch & {
   score?: {
@@ -180,15 +175,15 @@ export default function ResultsPage() {
                 </dd>
               </div>
               <div>
-                <dt>Grupos</dt>
+                <dt>Partidos</dt>
                 <dd className="mt-1 text-3xl font-black tabular-nums text-white">
                   {score?.breakdown.group.points ?? 0}
                 </dd>
               </div>
               <div>
-                <dt>Eliminatorias</dt>
+                <dt>Final</dt>
                 <dd className="mt-1 text-3xl font-black tabular-nums text-white">
-                  {score?.breakdown.knockout.points ?? 0}
+                  {score?.breakdown.final.points ?? 0}
                 </dd>
               </div>
             </div>
@@ -213,48 +208,46 @@ export default function ResultsPage() {
               <h2 className="border-b border-[var(--foreground)] pb-2 font-mono text-xs font-bold uppercase tracking-[0.3em]">
                 Desglose de puntos
               </h2>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(
                   [
                     {
-                      label: "Solo el ganador",
-                      count: score?.breakdown.group.outcomes ?? 0,
-                      each: 10,
-                    },
-                    {
                       label: "Marcador exacto",
                       count: score?.breakdown.group.exact ?? 0,
-                      each: 20,
-                    },
-                    {
-                      label: "Único en clavar el marcador",
-                      count: score?.breakdown.group.uniqueExact ?? 0,
-                      each: 40,
-                    },
-                    {
-                      label: "Ganador en Octavos",
-                      count: score?.breakdown.knockout.r16 ?? 0,
-                      each: 20,
-                    },
-                    {
-                      label: "Ganador en Cuartos",
-                      count: score?.breakdown.knockout.qf ?? 0,
-                      each: 30,
-                    },
-                    {
-                      label: "Ganador en Semifinal",
-                      count: score?.breakdown.knockout.sf ?? 0,
-                      each: 40,
-                    },
-                    {
-                      label: "Subcampeón",
-                      count: score?.breakdown.knockout.runnerUp ?? 0,
                       each: 50,
                     },
                     {
+                      label: "Resultado (ganador o empate)",
+                      count: score?.breakdown.group.outcomes ?? 0,
+                      each: 30,
+                    },
+                    {
+                      label: "Diferencia de gol",
+                      count: score?.breakdown.group.goalDiff ?? 0,
+                      each: 20,
+                    },
+                    {
+                      label: "Campeón y subcampeón",
+                      count: score?.breakdown.final.both ? 1 : 0,
+                      each: 350,
+                    },
+                    {
                       label: "Campeón",
-                      count: score?.breakdown.knockout.champion ?? 0,
-                      each: 60,
+                      count:
+                        score?.breakdown.final.champion &&
+                        !score?.breakdown.final.both
+                          ? 1
+                          : 0,
+                      each: 300,
+                    },
+                    {
+                      label: "Subcampeón",
+                      count:
+                        score?.breakdown.final.runnerUp &&
+                        !score?.breakdown.final.both
+                          ? 1
+                          : 0,
+                      each: 250,
                     },
                   ] as const
                 ).map((item) => (
@@ -420,8 +413,8 @@ export default function ResultsPage() {
                               }`}
                             >
                               {isHit && (
-                                <span className="absolute -top-2 right-2 border border-emerald-600 bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-black tabular-nums text-emerald-800">
-                                  +{STAGE_POINTS[stage]} pts
+                                <span className="absolute -top-2 right-2 border border-emerald-600 bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-[0.1em] text-emerald-800">
+                                  ✓ Acertado
                                 </span>
                               )}
                               <div className="flex items-center justify-end gap-2 text-right text-sm font-bold uppercase tracking-tight">
@@ -521,17 +514,20 @@ export default function ResultsPage() {
                         prediction.champion.name,
                       ).name}
                     </p>
-                    {(score?.knockoutHits.champion ||
-                      score?.knockoutHits.runnerUp) && (
+                    {(score?.breakdown.final.champion ||
+                      score?.breakdown.final.runnerUp) && (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {score?.knockoutHits.champion && (
+                        {score?.breakdown.final.both ? (
                           <span className="border border-emerald-600 bg-emerald-100 px-3 py-1 font-mono text-xs font-black tabular-nums text-emerald-800">
-                            ¡Acertaste el campeón! +60 pts
+                            ¡Acertaste campeón y subcampeón! +350 pts
                           </span>
-                        )}
-                        {score?.knockoutHits.runnerUp && (
+                        ) : score?.breakdown.final.champion ? (
                           <span className="border border-emerald-600 bg-emerald-100 px-3 py-1 font-mono text-xs font-black tabular-nums text-emerald-800">
-                            ¡Acertaste el subcampeón! +50 pts
+                            ¡Acertaste el campeón! +300 pts
+                          </span>
+                        ) : (
+                          <span className="border border-emerald-600 bg-emerald-100 px-3 py-1 font-mono text-xs font-black tabular-nums text-emerald-800">
+                            ¡Acertaste el subcampeón! +250 pts
                           </span>
                         )}
                       </div>
