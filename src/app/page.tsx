@@ -9,10 +9,6 @@ const MERQUE_LOGO =
 const partners = [
   {
     name: "Marca aliada",
-    src: "https://mqplatform.blob.core.windows.net/brandslogo/80f70f0c-e275-5f26-25e2-75b5db5b648d.png?sv=2025-05-05&ss=bfqt&srt=sco&st=2026-04-28T20%3A37%3A59Z&se=2026-04-30T20%3A37%3A59Z&sp=rwdxylacuptfi&sig=28vOIzeF%2BI1a%2FbfQmf3fcieFr2L8Rc8V6InTwAEKdx8%3D",
-  },
-  {
-    name: "Marca aliada",
     src: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSdxzcuqEmKNIege1w1_FpRL4av13KPdpA4g&s",
   },
   {
