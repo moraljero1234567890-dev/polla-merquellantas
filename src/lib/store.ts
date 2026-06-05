@@ -89,6 +89,11 @@ export async function listPredictionsForUser(
     .toArray();
 }
 
+export async function listAllPredictions(): Promise<PredictionDoc[]> {
+  const col = await predictionsCollection();
+  return col.find({}).toArray();
+}
+
 export async function getPrediction(
   email: string,
   attempt: number,

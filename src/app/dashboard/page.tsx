@@ -15,6 +15,7 @@ type AttemptSummary = {
   updatedAt: string;
   completedAt: string | null;
   groupCount: number;
+  points: number;
 };
 
 export default function DashboardPage() {
@@ -81,6 +82,7 @@ export default function DashboardPage() {
         updatedAt: "",
         completedAt: null,
         groupCount: 0,
+        points: 0,
       },
     );
   }
@@ -178,7 +180,14 @@ export default function DashboardPage() {
                         )}
                       </div>
                     </div>
-                    <div />
+                    <div className="flex items-baseline gap-2 md:justify-center">
+                      <span className="font-mono text-3xl font-black tabular-nums">
+                        {row.points}
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[var(--foreground-muted)]">
+                        pts
+                      </span>
+                    </div>
                     <div className="flex flex-wrap gap-3">
                       <Link
                         href={`/dashboard/predict/${row.attempt}`}
@@ -190,12 +199,12 @@ export default function DashboardPage() {
                             ? "Continuar"
                             : "Comenzar"}
                       </Link>
-                      {completed && (
+                      {(completed || row.groupCount > 0) && (
                         <Link
                           href={`/dashboard/results/${row.attempt}`}
                           className="inline-flex h-11 items-center justify-center border border-[var(--foreground)] px-5 text-sm font-semibold uppercase tracking-[0.18em] transition hover:bg-[var(--foreground)] hover:text-white"
                         >
-                          Ver resultados
+                          Puntos y resultados
                         </Link>
                       )}
                     </div>

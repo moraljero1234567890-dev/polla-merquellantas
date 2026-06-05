@@ -6,6 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/data/worldcup2026";
 import { staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
+// Type-only import: erased at compile time, so the "server-only" guard
+// inside scoring.ts never runs in the browser bundle.
+import type { AttemptScore } from "@/lib/scoring";
 import { displayTeam, flagUrl, normalizeTeam } from "@/lib/team-display";
 import type { KnockoutPick, PredictionDoc } from "@/lib/types";
 
@@ -19,6 +22,12 @@ const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
   SEMI_FINALS: "Semifinales",
   THIRD_PLACE: "Tercer puesto",
   FINAL: "Final",
+};
+
+const STAGE_POINTS: Partial<Record<KnockoutPick["stage"], number>> = {
+  ROUND_OF_16: 20,
+  QUARTER_FINALS: 30,
+  SEMI_FINALS: 40,
 };
 
 type MatchWithScore = ApiMatch & {
@@ -55,6 +64,7 @@ export default function ResultsPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [matches, setMatches] = useState<MatchWithScore[]>([]);
   const [prediction, setPrediction] = useState<PredictionDoc | null>(null);
+  const [score, setScore] = useState<AttemptScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +94,7 @@ export default function ResultsPage() {
           : staticFallback();
         setMatches(arr.length ? arr : staticFallback());
         setPrediction(p.prediction);
+        setScore(p.score ?? null);
         setError(null);
       })
       .catch(() => {
@@ -101,6 +112,15 @@ export default function ResultsPage() {
   const groupMatches = useMemo(
     () => matches.filter((m) => m.stage === "GROUP_STAGE" && m.group),
     [matches],
+  );
+
+  const knockoutHitSets = useMemo(
+    () => ({
+      ROUND_OF_16: new Set(score?.knockoutHits.r16 ?? []),
+      QUARTER_FINALS: new Set(score?.knockoutHits.qf ?? []),
+      SEMI_FINALS: new Set(score?.knockoutHits.sf ?? []),
+    }),
+    [score],
   );
 
   function handleLogout() {
@@ -152,6 +172,26 @@ export default function ResultsPage() {
               <span className="text-amber-300">amarillo</span> = mismo resultado,{" "}
               <span className="text-red-300">rojo</span> = fallaste.
             </p>
+            <div className="mt-6 grid max-w-md grid-cols-3 gap-6 font-mono text-[11px] uppercase tracking-[0.28em] text-white/60">
+              <div>
+                <dt>Puntos totales</dt>
+                <dd className="mt-1 text-3xl font-black tabular-nums text-[var(--brand)]">
+                  {score?.breakdown.total ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt>Grupos</dt>
+                <dd className="mt-1 text-3xl font-black tabular-nums text-white">
+                  {score?.breakdown.group.points ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt>Eliminatorias</dt>
+                <dd className="mt-1 text-3xl font-black tabular-nums text-white">
+                  {score?.breakdown.knockout.points ?? 0}
+                </dd>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -168,6 +208,82 @@ export default function ResultsPage() {
                 {error}
               </div>
             )}
+
+            <section className="mx-auto max-w-6xl px-6 py-10">
+              <h2 className="border-b border-[var(--foreground)] pb-2 font-mono text-xs font-bold uppercase tracking-[0.3em]">
+                Desglose de puntos
+              </h2>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {(
+                  [
+                    {
+                      label: "Solo el ganador",
+                      count: score?.breakdown.group.outcomes ?? 0,
+                      each: 10,
+                    },
+                    {
+                      label: "Marcador exacto",
+                      count: score?.breakdown.group.exact ?? 0,
+                      each: 20,
+                    },
+                    {
+                      label: "Único en clavar el marcador",
+                      count: score?.breakdown.group.uniqueExact ?? 0,
+                      each: 40,
+                    },
+                    {
+                      label: "Ganador en Octavos",
+                      count: score?.breakdown.knockout.r16 ?? 0,
+                      each: 20,
+                    },
+                    {
+                      label: "Ganador en Cuartos",
+                      count: score?.breakdown.knockout.qf ?? 0,
+                      each: 30,
+                    },
+                    {
+                      label: "Ganador en Semifinal",
+                      count: score?.breakdown.knockout.sf ?? 0,
+                      each: 40,
+                    },
+                    {
+                      label: "Subcampeón",
+                      count: score?.breakdown.knockout.runnerUp ?? 0,
+                      each: 50,
+                    },
+                    {
+                      label: "Campeón",
+                      count: score?.breakdown.knockout.champion ?? 0,
+                      each: 60,
+                    },
+                  ] as const
+                ).map((item) => (
+                  <div
+                    key={item.label}
+                    className={`border p-4 ${
+                      item.count > 0
+                        ? "border-emerald-600 bg-emerald-50"
+                        : "border-[var(--line)] bg-white"
+                    }`}
+                  >
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--foreground-muted)]">
+                      {item.label}
+                    </p>
+                    <p className="mt-2 flex items-baseline gap-2">
+                      <span className="font-mono text-2xl font-black tabular-nums">
+                        {item.count}
+                      </span>
+                      <span className="text-xs text-[var(--foreground-soft)]">
+                        × {item.each} pts ={" "}
+                        <span className="font-bold text-[var(--foreground)]">
+                          {item.count * item.each}
+                        </span>
+                      </span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             <section className="mx-auto max-w-6xl px-6 py-10">
               <h2 className="border-b border-[var(--foreground)] pb-2 font-mono text-xs font-bold uppercase tracking-[0.3em]">
@@ -237,12 +353,30 @@ export default function ResultsPage() {
                           {awayT.name}
                         </span>
                       </div>
-                      <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)] md:text-right">
-                        {m.status === "FINISHED"
-                          ? "Final"
-                          : m.status === "IN_PLAY"
-                            ? "En juego"
-                            : "Programado"}
+                      <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)] md:flex-col md:items-end md:gap-1 md:text-right">
+                        <span>
+                          {m.status === "FINISHED"
+                            ? "Final"
+                            : m.status === "IN_PLAY"
+                              ? "En juego"
+                              : "Programado"}
+                        </span>
+                        {m.status === "FINISHED" &&
+                          (() => {
+                            const pts =
+                              score?.groupPointsByMatch[m._id] ?? 0;
+                            return (
+                              <span
+                                className={`border px-2 py-0.5 text-[11px] font-black tabular-nums tracking-normal ${
+                                  pts > 0
+                                    ? "border-emerald-600 bg-emerald-100 text-emerald-800"
+                                    : "border-[var(--line)] bg-white text-[var(--foreground-muted)]"
+                                }`}
+                              >
+                                +{pts} pts
+                              </span>
+                            );
+                          })()}
                       </div>
                     </li>
                   );
@@ -273,11 +407,23 @@ export default function ResultsPage() {
                         {picks.map((p) => {
                           const h = displayTeam(p.homeTeamCode, p.homeTeamName);
                           const a = displayTeam(p.awayTeamCode, p.awayTeamName);
+                          const isHit =
+                            stage !== "ROUND_OF_32" &&
+                            knockoutHitSets[stage].has(p.matchId);
                           return (
                             <li
                               key={p.matchId}
-                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border border-[var(--line)] bg-white p-4"
+                              className={`relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 border p-4 ${
+                                isHit
+                                  ? "border-emerald-600 bg-emerald-50"
+                                  : "border-[var(--line)] bg-white"
+                              }`}
                             >
+                              {isHit && (
+                                <span className="absolute -top-2 right-2 border border-emerald-600 bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-black tabular-nums text-emerald-800">
+                                  +{STAGE_POINTS[stage]} pts
+                                </span>
+                              )}
                               <div className="flex items-center justify-end gap-2 text-right text-sm font-bold uppercase tracking-tight">
                                 <span>{h.name || "—"}</span>
                                 {h.crest && (
@@ -375,6 +521,21 @@ export default function ResultsPage() {
                         prediction.champion.name,
                       ).name}
                     </p>
+                    {(score?.knockoutHits.champion ||
+                      score?.knockoutHits.runnerUp) && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {score?.knockoutHits.champion && (
+                          <span className="border border-emerald-600 bg-emerald-100 px-3 py-1 font-mono text-xs font-black tabular-nums text-emerald-800">
+                            ¡Acertaste el campeón! +60 pts
+                          </span>
+                        )}
+                        {score?.knockoutHits.runnerUp && (
+                          <span className="border border-emerald-600 bg-emerald-100 px-3 py-1 font-mono text-xs font-black tabular-nums text-emerald-800">
+                            ¡Acertaste el subcampeón! +50 pts
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

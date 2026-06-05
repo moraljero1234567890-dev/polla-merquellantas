@@ -19,11 +19,18 @@ export type StandingRow = {
   group: string;
 };
 
+export type GroupMatchLike = {
+  _id: string;
+  group: string | null;
+  home: { code: string; name: string };
+  away: { code: string; name: string };
+};
+
 export function computeGroupStandings(
-  groupMatches: MatchDoc[],
-  predictedScores: Record<string, GroupScore>,
+  groupMatches: GroupMatchLike[],
+  predictedScores: Record<string, { home: number | null; away: number | null }>,
 ): Record<string, StandingRow[]> {
-  const byGroup: Record<string, MatchDoc[]> = {};
+  const byGroup: Record<string, GroupMatchLike[]> = {};
   for (const m of groupMatches) {
     if (!m.group) continue;
     (byGroup[m.group] ??= []).push(m);
@@ -49,6 +56,10 @@ export function computeGroupStandings(
     };
 
     for (const m of matches) {
+      // Seed both teams so the table always lists the whole group,
+      // even before any score is filled in.
+      const home = ensure(m.home.code, m.home.name);
+      const away = ensure(m.away.code, m.away.name);
       const score = predictedScores[m._id];
       if (
         !score ||
@@ -56,8 +67,6 @@ export function computeGroupStandings(
         typeof score.away !== "number"
       )
         continue;
-      const home = ensure(m.home.code, m.home.name);
-      const away = ensure(m.away.code, m.away.name);
       home.played++;
       away.played++;
       home.gf += score.home;

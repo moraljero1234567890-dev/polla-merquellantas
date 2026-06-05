@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { emptyAttemptScore, scorePredictions } from "@/lib/scoring";
 import {
   getAllMatches,
   getPrediction,
   getUserByEmail,
   isTournamentLocked,
+  listAllPredictions,
   upsertPrediction,
 } from "@/lib/store";
 import {
@@ -99,7 +101,14 @@ export async function GET(
     );
   }
   const prediction = await loadOrCreate(email, attempt);
-  return NextResponse.json({ prediction });
+  // Scored against the full prediction pool so unique-exact bonuses are right.
+  const [matches, allPredictions] = await Promise.all([
+    getAllMatches(),
+    listAllPredictions(),
+  ]);
+  const scores = scorePredictions(matches, allPredictions);
+  const score = scores.get(prediction._id) ?? emptyAttemptScore();
+  return NextResponse.json({ prediction, score });
 }
 
 type PostBody =

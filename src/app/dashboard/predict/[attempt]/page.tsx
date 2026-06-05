@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { formatDate } from "@/data/worldcup2026";
+import { computeGroupStandings, type StandingRow } from "@/lib/bracket";
 import { staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
 import { displayTeam, normalizeTeam } from "@/lib/team-display";
@@ -592,6 +593,116 @@ function BracketSlot({
   );
 }
 
+function GroupStandingsTable({
+  group,
+  rows,
+}: {
+  group: string;
+  rows: StandingRow[];
+}) {
+  return (
+    <div className="border border-[var(--line)] bg-white">
+      <div className="flex items-baseline justify-between gap-3 border-b border-[var(--foreground)] px-4 py-3">
+        <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.28em]">
+          Tabla · Grupo {group}
+        </h3>
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">
+          Según tu pronóstico
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-[var(--foreground-muted)]">
+          Llena los marcadores para ver la tabla.
+        </p>
+      ) : (
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[var(--line)] font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--foreground-muted)]">
+              <th className="px-2 py-2 text-left">#</th>
+              <th className="px-2 py-2 text-left">Equipo</th>
+              <th className="px-1 py-2 text-center">PJ</th>
+              <th className="px-1 py-2 text-center">G</th>
+              <th className="px-1 py-2 text-center">E</th>
+              <th className="px-1 py-2 text-center">P</th>
+              <th className="hidden px-1 py-2 text-center sm:table-cell">GF</th>
+              <th className="hidden px-1 py-2 text-center sm:table-cell">GC</th>
+              <th className="px-1 py-2 text-center">DG</th>
+              <th className="px-2 py-2 text-center">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const team = displayTeam(r.teamCode, r.teamName);
+              const rowCls =
+                i < 2
+                  ? "border-l-2 border-l-emerald-600 bg-emerald-50/60"
+                  : i === 2
+                    ? "border-l-2 border-l-amber-500 bg-amber-50/60"
+                    : "border-l-2 border-l-transparent";
+              return (
+                <tr
+                  key={r.teamCode}
+                  className={`border-b border-[var(--line)] text-sm last:border-b-0 ${rowCls}`}
+                >
+                  <td className="px-2 py-2 font-mono text-xs font-black tabular-nums">
+                    {i + 1}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {team.crest && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={team.crest}
+                          alt=""
+                          aria-hidden
+                          className="h-4 w-6 shrink-0 border border-[var(--line)] object-cover"
+                        />
+                      )}
+                      <span className="truncate text-xs font-bold uppercase tracking-tight">
+                        {team.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-1 py-2 text-center font-mono text-xs tabular-nums">
+                    {r.played}
+                  </td>
+                  <td className="px-1 py-2 text-center font-mono text-xs tabular-nums text-emerald-700">
+                    {r.won}
+                  </td>
+                  <td className="px-1 py-2 text-center font-mono text-xs tabular-nums">
+                    {r.drawn}
+                  </td>
+                  <td className="px-1 py-2 text-center font-mono text-xs tabular-nums text-red-700">
+                    {r.lost}
+                  </td>
+                  <td className="hidden px-1 py-2 text-center font-mono text-xs tabular-nums sm:table-cell">
+                    {r.gf}
+                  </td>
+                  <td className="hidden px-1 py-2 text-center font-mono text-xs tabular-nums sm:table-cell">
+                    {r.ga}
+                  </td>
+                  <td className="px-1 py-2 text-center font-mono text-xs tabular-nums">
+                    {r.gd > 0 ? `+${r.gd}` : r.gd}
+                  </td>
+                  <td className="px-2 py-2 text-center font-mono text-sm font-black tabular-nums">
+                    {r.points}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <p className="border-t border-dashed border-[var(--line)] px-4 py-2 text-[10px] leading-relaxed text-[var(--foreground-muted)]">
+        <span className="font-bold text-emerald-700">1º y 2º</span> clasifican
+        directo · <span className="font-bold text-amber-600">3º</span> puede
+        avanzar entre los 8 mejores terceros. Se actualiza con cada marcador
+        que llenas.
+      </p>
+    </div>
+  );
+}
+
 const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
   ROUND_OF_32: "Dieciseisavos",
   ROUND_OF_16: "Octavos",
@@ -705,6 +816,11 @@ export default function PredictPage() {
     );
     return map;
   }, [groupMatches]);
+
+  const standingsByGroup = useMemo(
+    () => computeGroupStandings(groupMatches, groupDrafts),
+    [groupMatches, groupDrafts],
+  );
 
   const filledCount = Object.values(groupDrafts).filter(
     (d) => typeof d.home === "number" && typeof d.away === "number",
@@ -1091,36 +1207,44 @@ export default function PredictPage() {
                   automáticamente.
                 </p>
               </div>
-              <div className="mt-8 space-y-8">
-                {matchdaysForActive.map((md) => {
-                  const list = groupMatchesForActive.filter(
-                    (m) => m.matchday === md,
-                  );
-                  if (!list.length) return null;
-                  return (
-                    <div key={md}>
-                      <div className="mb-3 flex items-baseline justify-between border-b border-[var(--foreground)] pb-2">
-                        <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-                          Jornada {md}
-                        </h2>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
-                          {list[0].date ? formatDate(list[0].date) : ""}
-                        </span>
+              <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="lg:order-2 lg:sticky lg:top-[150px]">
+                  <GroupStandingsTable
+                    group={activeGroup}
+                    rows={standingsByGroup[activeGroup] ?? []}
+                  />
+                </div>
+                <div className="space-y-8 lg:order-1">
+                  {matchdaysForActive.map((md) => {
+                    const list = groupMatchesForActive.filter(
+                      (m) => m.matchday === md,
+                    );
+                    if (!list.length) return null;
+                    return (
+                      <div key={md}>
+                        <div className="mb-3 flex items-baseline justify-between border-b border-[var(--foreground)] pb-2">
+                          <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
+                            Jornada {md}
+                          </h2>
+                          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
+                            {list[0].date ? formatDate(list[0].date) : ""}
+                          </span>
+                        </div>
+                        <ul className="grid gap-3">
+                          {list.map((m) => (
+                            <GroupMatchRow
+                              key={m._id}
+                              match={m}
+                              score={groupDrafts[m._id]}
+                              onChange={(h, a) => queueGroupSave(m._id, h, a)}
+                              onCommit={() => flushMatch(m._id)}
+                            />
+                          ))}
+                        </ul>
                       </div>
-                      <ul className="grid gap-3">
-                        {list.map((m) => (
-                          <GroupMatchRow
-                            key={m._id}
-                            match={m}
-                            score={groupDrafts[m._id]}
-                            onChange={(h, a) => queueGroupSave(m._id, h, a)}
-                            onCommit={() => flushMatch(m._id)}
-                          />
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </section>
 

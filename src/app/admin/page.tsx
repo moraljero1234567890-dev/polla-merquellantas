@@ -16,6 +16,38 @@ type AdminUser = {
   createdAt: string | Date;
 };
 
+type LeaderboardRow = {
+  email: string;
+  name: string;
+  attempt: number;
+  attemptsAllowed: number;
+  totalAttempts: number;
+  breakdown: {
+    group: {
+      outcomes: number;
+      exact: number;
+      uniqueExact: number;
+      points: number;
+    };
+    knockout: {
+      r16: number;
+      qf: number;
+      sf: number;
+      runnerUp: number;
+      champion: number;
+      points: number;
+    };
+    total: number;
+  };
+};
+
+type LeaderboardStats = {
+  totalUsers: number;
+  totalPredictions: number;
+  finishedGroupMatches: number;
+  finishedKnockoutMatches: number;
+};
+
 type Banner = { kind: "ok" | "err"; text: string } | null;
 
 export default function AdminPage() {
@@ -32,6 +64,11 @@ export default function AdminPage() {
   const [creating, setCreating] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [leaderboardStats, setLeaderboardStats] =
+    useState<LeaderboardStats | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -80,9 +117,42 @@ export default function AdminPage() {
     [],
   );
 
+  const loadLeaderboard = useCallback(async (t: string) => {
+    if (!t) {
+      setLeaderboard([]);
+      setLeaderboardStats(null);
+      return;
+    }
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch("/api/admin/leaderboard", {
+        headers: { authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) {
+        setLeaderboard([]);
+        setLeaderboardStats(null);
+        return;
+      }
+      const data = (await res.json()) as {
+        rows: LeaderboardRow[];
+        stats: LeaderboardStats;
+      };
+      setLeaderboard(data.rows);
+      setLeaderboardStats(data.stats);
+    } catch {
+      setLeaderboard([]);
+      setLeaderboardStats(null);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (savedToken) void loadUsers(savedToken);
-  }, [savedToken, loadUsers]);
+    if (savedToken) {
+      void loadUsers(savedToken);
+      void loadLeaderboard(savedToken);
+    }
+  }, [savedToken, loadUsers, loadLeaderboard]);
 
   function handleSaveToken(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -95,6 +165,8 @@ export default function AdminPage() {
     setToken("");
     setSavedToken("");
     setUsers([]);
+    setLeaderboard([]);
+    setLeaderboardStats(null);
     setBanner(null);
   }
 
@@ -189,6 +261,7 @@ export default function AdminPage() {
         kind: "ok",
         text: `${data.upserts} partidos cargados desde ${data.source}.`,
       });
+      await loadLeaderboard(savedToken);
     } catch (err) {
       setBanner({
         kind: "err",
@@ -400,8 +473,122 @@ export default function AdminPage() {
         </section>
 
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
+              4 · Tabla de posiciones
+            </h2>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
+                {leaderboardLoading
+                  ? "Cargando…"
+                  : `${leaderboard.length} boleta${leaderboard.length === 1 ? "" : "s"}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadLeaderboard(savedToken)}
+                disabled={!savedToken || leaderboardLoading}
+                className="h-8 border border-[var(--line)] px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] transition hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Recalcular
+              </button>
+            </div>
+          </div>
+          {leaderboardStats && (
+            <p className="mt-3 font-mono text-[11px] text-[var(--foreground-muted)]">
+              {leaderboardStats.finishedGroupMatches} partido
+              {leaderboardStats.finishedGroupMatches === 1 ? "" : "s"} de fase de
+              grupos terminado
+              {leaderboardStats.finishedGroupMatches === 1 ? "" : "s"} ·{" "}
+              {leaderboardStats.finishedKnockoutMatches} de eliminatorias ·{" "}
+              {leaderboardStats.totalPredictions} boletas registradas
+            </p>
+          )}
+          {leaderboard.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--foreground-muted)]">
+              {savedToken
+                ? "Aún no hay puntos para mostrar. Los puntos se calcularán automáticamente cuando los partidos terminen y los marcadores se carguen."
+                : "Guarda tu token para ver la tabla."}
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--foreground)] text-left font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--foreground-muted)]">
+                    <th className="py-2 pr-3">#</th>
+                    <th className="py-2 pr-3">Participante</th>
+                    <th className="py-2 pr-3">Intento</th>
+                    <th className="py-2 pr-3 text-right">Grupos</th>
+                    <th className="py-2 pr-3 text-right">Elim.</th>
+                    <th className="py-2 pr-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.map((row, idx) => {
+                    const rank = idx + 1;
+                    return (
+                      <tr
+                        key={`${row.email}-${row.attempt}`}
+                        className="border-b border-[var(--line)] align-top"
+                      >
+                        <td className="py-3 pr-3 font-mono text-sm font-bold tabular-nums">
+                          {rank === 1
+                            ? "🥇"
+                            : rank === 2
+                              ? "🥈"
+                              : rank === 3
+                                ? "🥉"
+                                : rank.toString().padStart(2, "0")}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <p className="font-semibold">{row.name}</p>
+                          <p className="font-mono text-[11px] text-[var(--foreground-muted)]">
+                            {row.email}
+                          </p>
+                        </td>
+                        <td className="py-3 pr-3 font-mono text-xs text-[var(--foreground-soft)]">
+                          {row.attempt}/{row.attemptsAllowed}
+                        </td>
+                        <td className="py-3 pr-3 text-right">
+                          <div className="font-mono font-bold tabular-nums">
+                            {row.breakdown.group.points}
+                          </div>
+                          <div className="font-mono text-[10px] text-[var(--foreground-muted)]">
+                            {row.breakdown.group.uniqueExact}u ·{" "}
+                            {row.breakdown.group.exact}e ·{" "}
+                            {row.breakdown.group.outcomes}g
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3 text-right">
+                          <div className="font-mono font-bold tabular-nums">
+                            {row.breakdown.knockout.points}
+                          </div>
+                          <div className="font-mono text-[10px] text-[var(--foreground-muted)]">
+                            {row.breakdown.knockout.r16}·
+                            {row.breakdown.knockout.qf}·
+                            {row.breakdown.knockout.sf}
+                            {row.breakdown.knockout.runnerUp ? " ·sub" : ""}
+                            {row.breakdown.knockout.champion ? " ·camp" : ""}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3 text-right font-mono text-lg font-black tabular-nums">
+                          {row.breakdown.total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--foreground-muted)]">
+                Grupos: u = únicos, e = exactos, g = solo ganador · Elim: r16 ·
+                cuartos · semis (+ sub / campeón)
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-            4 · Partidos del Mundial
+            5 · Partidos del Mundial
           </h2>
           <p className="mt-3 text-sm text-[var(--foreground-soft)]">
             Se cargan automáticamente la primera vez que alguien abre el
