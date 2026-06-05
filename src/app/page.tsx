@@ -15,6 +15,18 @@ const partners = [
     name: "Marca aliada",
     src: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSdxzcuqEmKNIege1w1_FpRL4av13KPdpA4g&s",
   },
+  {
+    name: "Marca aliada",
+    src: "https://www.muchoneumatico.com/blog/wp-content/uploads/2023/01/El-logo-de-Neumaticos-Aplus.jpg",
+  },
+  {
+    name: "Marca aliada",
+    src: "https://upload.wikimedia.org/wikipedia/en/thumb/5/54/TotalEnergies_logo.svg/1280px-TotalEnergies_logo.svg.png",
+  },
+  {
+    name: "Marca aliada",
+    src: "https://upload.wikimedia.org/wikipedia/commons/8/88/Hankook_logo_as_of_2019.png",
+  },
 ];
 
 const groupRows = [
@@ -164,7 +176,7 @@ export default function Home() {
                 nuestras marcas aliadas.
               </p>
             </div>
-            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {partners.map((p, i) => (
                 <div
                   key={i}
