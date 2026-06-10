@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   title: "Polla Mundialista Merque",
   description:
     "La polla del Mundial de Merquellantas. Pronostica los partidos, suma puntos y gana premios.",
+  // Set GOOGLE_SITE_VERIFICATION in Vercel (the token Search Console gives
+  // you, e.g. "abc123…") to verify ownership for the Safe Browsing review.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export default function RootLayout({
