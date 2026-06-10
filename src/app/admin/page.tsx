@@ -272,10 +272,18 @@ export default function AdminPage() {
         });
         return;
       }
+      const parts = [
+        `${data.created ?? 0} nuevo${data.created === 1 ? "" : "s"}`,
+        `${data.updated ?? 0} actualizado${data.updated === 1 ? "" : "s"}`,
+      ];
       setBanner({
         kind: "ok",
-        text: `Importados ${data.imported} usuario${data.imported === 1 ? "" : "s"}${
-          data.skipped ? ` · ${data.skipped} fila(s) omitida(s) sin cédula válida` : ""
+        text: `Procesados ${data.imported} usuario${data.imported === 1 ? "" : "s"}: ${parts.join(
+          " · ",
+        )}${
+          data.skipped
+            ? ` · ${data.skipped} fila(s) omitida(s) sin cédula válida`
+            : ""
         }.`,
       });
       setImportFile(null);
@@ -494,8 +502,10 @@ export default function AdminPage() {
             <code className="font-mono text-xs"># ACCESOS</code>,{" "}
             <code className="font-mono text-xs">VENDEDOR</code>. La cédula/NIT se
             usa como usuario y contraseña; <strong># ACCESOS</strong> define los
-            intentos permitidos. Reimportar el mismo archivo actualiza los
-            usuarios sin borrar sus pronósticos.
+            intentos permitidos. Puedes subir el mismo archivo otra vez: los
+            usuarios que ya existen se actualizan (por ejemplo, para corregir
+            el número de intentos) sin borrar sus pronósticos ni su fecha de
+            registro.
           </p>
           <form
             onSubmit={handleImport}

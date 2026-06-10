@@ -134,8 +134,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { count } = await bulkUpsertUsers(parsed);
-    return NextResponse.json({ imported: count, skipped });
+    const { count, created, updated } = await bulkUpsertUsers(parsed);
+    return NextResponse.json({ imported: count, created, updated, skipped });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Database error";
     return NextResponse.json(

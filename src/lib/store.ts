@@ -101,11 +101,12 @@ export type BulkUserInput = {
 /**
  * Insert/update many users at once (XLSX import). Keyed by the synthetic
  * email derived from the cédula, so re-importing the same sheet updates
- * existing users without touching their predictions.
+ * existing users (e.g. a corrected attempt count) in place — preserving
+ * their original createdAt and never touching their saved predictions.
  */
 export async function bulkUpsertUsers(
   rows: BulkUserInput[],
-): Promise<{ count: number }> {
+): Promise<{ count: number; created: number; updated: number }> {
   await ensureUsersIndex();
   const col = await usersCollection();
   const ops = rows
@@ -113,28 +114,35 @@ export async function bulkUpsertUsers(
       const nit = r.nit.replace(/\D/g, "");
       if (!nit) return null;
       const email = syntheticEmail(nit);
-      const doc: UserDoc = {
-        _id: email,
-        email,
-        nit,
-        cedula: r.cedula?.trim() || undefined,
-        name: r.name.trim(),
-        seller: r.seller?.trim() || undefined,
-        attemptsAllowed: Math.max(1, Math.min(20, Math.floor(r.attemptsAllowed))),
-        createdAt: new Date(),
-      };
+      // $set updates fields on existing users (attempts, name, seller…);
+      // $setOnInsert only stamps createdAt the first time the user appears.
       return {
-        replaceOne: {
-          filter: { _id: doc._id },
-          replacement: doc,
+        updateOne: {
+          filter: { _id: email },
+          update: {
+            $set: {
+              email,
+              nit,
+              cedula: r.cedula?.trim() || undefined,
+              name: r.name.trim(),
+              seller: r.seller?.trim() || undefined,
+              attemptsAllowed: Math.max(
+                1,
+                Math.min(20, Math.floor(r.attemptsAllowed)),
+              ),
+            },
+            $setOnInsert: { createdAt: new Date() },
+          },
           upsert: true,
         },
       };
     })
     .filter((op): op is NonNullable<typeof op> => op !== null);
-  if (ops.length === 0) return { count: 0 };
-  await col.bulkWrite(ops, { ordered: false });
-  return { count: ops.length };
+  if (ops.length === 0) return { count: 0, created: 0, updated: 0 };
+  const res = await col.bulkWrite(ops, { ordered: false });
+  const created = res.upsertedCount ?? 0;
+  const updated = res.modifiedCount ?? 0;
+  return { count: ops.length, created, updated };
 }
 
 export async function getUserByEmail(email: string): Promise<UserDoc | null> {
