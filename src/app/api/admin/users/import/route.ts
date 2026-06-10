@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { bulkUpsertUsers, type BulkUserInput } from "@/lib/store";
+import { bulkUpsertUsers, canonicalNit, type BulkUserInput } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -112,15 +112,16 @@ export async function POST(request: NextRequest) {
         if (Number.isFinite(n) && n > 0) accesos = n;
       }
     });
-    const nit = cedulaRaw.replace(/\D/g, "");
+    // Drop any verification digit ("-X") so keys match regardless of format.
+    const nit = canonicalNit(cedulaRaw);
     if (nit.length < 6) {
       skipped++;
       continue;
     }
     parsed.push({
       nit,
-      cedula: cedulaRaw || undefined,
-      name: name || cedulaRaw,
+      cedula: nit,
+      name: name || nit,
       seller: seller || undefined,
       attemptsAllowed: accesos,
     });

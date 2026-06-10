@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findUserByNit } from "@/lib/store";
+import { canonicalNit, findUserByNit } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  // The cédula/NIT is both the username and the password.
-  const nit = (body.nit ?? body.cedula ?? "").replace(/\D/g, "");
-  const password = (body.password ?? "").replace(/\D/g, "");
+  // The cédula/NIT is both the username and the password. The verification
+  // digit (after a hyphen) is ignored so "800130426-3" and "800130426" match.
+  const nit = canonicalNit(body.nit ?? body.cedula ?? "");
+  const password = canonicalNit(body.password ?? "");
   if (nit.length < 6) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 400 });
   }

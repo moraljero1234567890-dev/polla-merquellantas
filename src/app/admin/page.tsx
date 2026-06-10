@@ -67,6 +67,7 @@ export default function AdminPage() {
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [leaderboardStats, setLeaderboardStats] =
@@ -295,6 +296,51 @@ export default function AdminPage() {
       });
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleNormalize() {
+    if (!savedToken) {
+      setBanner({ kind: "err", text: "Guarda primero tu token de admin." });
+      return;
+    }
+    if (
+      !window.confirm(
+        "Esto quitará el dígito de verificación de TODas las cédulas/NIT guardados y moverá los pronósticos a la nueva clave. Hazlo una sola vez. ¿Continuar?",
+      )
+    ) {
+      return;
+    }
+    setNormalizing(true);
+    try {
+      const res = await fetch("/api/admin/users/normalize", {
+        method: "POST",
+        headers: { authorization: `Bearer ${savedToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBanner({
+          kind: "err",
+          text: data.detail ?? data.error ?? `Error ${res.status}`,
+        });
+        return;
+      }
+      setBanner({
+        kind: "ok",
+        text: `Cédulas normalizadas: ${data.changed} cambiada(s), ${data.unchanged} sin cambios${
+          data.predictionsMoved
+            ? ` · ${data.predictionsMoved} pronóstico(s) movido(s)`
+            : ""
+        }${data.collisions ? ` · ${data.collisions} duplicado(s) omitido(s)` : ""}.`,
+      });
+      await loadUsers(savedToken);
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        text: err instanceof Error ? err.message : "Error desconocido",
+      });
+    } finally {
+      setNormalizing(false);
     }
   }
 
@@ -530,6 +576,26 @@ export default function AdminPage() {
               Archivo: {importFile.name}
             </p>
           )}
+
+          <div className="mt-6 border-t border-dashed border-[var(--line)] pt-5">
+            <p className="text-sm text-[var(--foreground-soft)]">
+              ¿Subiste antes cédulas/NIT con dígito de verificación (el
+              <code className="mx-1 font-mono text-xs">-3</code> al final)?
+              Córrelo una sola vez para quitárselo a todos los usuarios ya
+              guardados y dejar la base lista para el nuevo archivo. Conserva
+              los pronósticos.
+            </p>
+            <button
+              type="button"
+              onClick={handleNormalize}
+              disabled={normalizing || !savedToken}
+              className="mt-3 h-11 border border-[var(--foreground)] px-5 text-sm font-semibold uppercase tracking-[0.18em] transition hover:bg-[var(--foreground)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {normalizing
+                ? "Normalizando…"
+                : "Quitar dígito de verificación a todos"}
+            </button>
+          </div>
         </section>
 
         <section className="mt-8 border border-[var(--line)] bg-white p-6">

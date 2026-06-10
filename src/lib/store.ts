@@ -49,14 +49,25 @@ export async function findUserByCredentials(
 
 export async function findUserByNit(nit: string): Promise<UserDoc | null> {
   const col = await usersCollection();
-  const cleanNit = nit.replace(/\D/g, "");
-  if (!cleanNit) return null;
-  return col.findOne({ nit: cleanNit });
+  const clean = canonicalNit(nit);
+  if (!clean) return null;
+  return col.findOne({ nit: clean });
+}
+
+/**
+ * Canonical cédula/NIT: drop the Colombian verification digit (the part
+ * after a hyphen, e.g. "800130426-3" -> "800130426") and keep digits only.
+ * This is the single normalized form used as the user key everywhere.
+ */
+export function canonicalNit(raw: string): string {
+  return String(raw ?? "")
+    .split("-")[0]
+    .replace(/\D/g, "");
 }
 
 /** Internal email key synthesized from a cédula when none is provided. */
 export function syntheticEmail(nit: string): string {
-  return `${nit.replace(/\D/g, "")}@polla.local`;
+  return `${canonicalNit(nit)}@polla.local`;
 }
 
 export async function listAllUsers(): Promise<UserDoc[]> {
@@ -74,13 +85,14 @@ export async function createUser(input: {
 }): Promise<UserDoc> {
   await ensureUsersIndex();
   const col = await usersCollection();
-  const nit = input.nit.replace(/\D/g, "");
+  const nit = canonicalNit(input.cedula ?? input.nit);
   const email = (input.email?.trim().toLowerCase() || syntheticEmail(nit));
   const doc: UserDoc = {
     _id: email,
     email,
     nit,
-    cedula: input.cedula?.trim() || undefined,
+    // Stored without the verification digit, so it never shows the "-X".
+    cedula: nit,
     name: input.name.trim(),
     seller: input.seller?.trim() || undefined,
     attemptsAllowed: Math.max(1, Math.min(20, Math.floor(input.attemptsAllowed))),
@@ -111,7 +123,7 @@ export async function bulkUpsertUsers(
   const col = await usersCollection();
   const ops = rows
     .map((r) => {
-      const nit = r.nit.replace(/\D/g, "");
+      const nit = canonicalNit(r.cedula ?? r.nit);
       if (!nit) return null;
       const email = syntheticEmail(nit);
       // $set updates fields on existing users (attempts, name, seller…);
@@ -123,7 +135,8 @@ export async function bulkUpsertUsers(
             $set: {
               email,
               nit,
-              cedula: r.cedula?.trim() || undefined,
+              // Stored without the verification digit ("-X").
+              cedula: nit,
               name: r.name.trim(),
               seller: r.seller?.trim() || undefined,
               attemptsAllowed: Math.max(
@@ -143,6 +156,96 @@ export async function bulkUpsertUsers(
   const created = res.upsertedCount ?? 0;
   const updated = res.modifiedCount ?? 0;
   return { count: ops.length, created, updated };
+}
+
+/**
+ * One-time cleanup: rewrite every user (and its predictions) so the
+ * cédula/NIT has no verification digit. Users were originally stored with
+ * the check digit baked into the key (e.g. "8001304263"); this re-keys
+ * them to the canonical form ("800130426") derived from their stored
+ * cédula, moving their predictions along so nothing is lost.
+ */
+export async function normalizeAllCedulas(): Promise<{
+  scanned: number;
+  changed: number;
+  unchanged: number;
+  collisions: number;
+  predictionsMoved: number;
+}> {
+  const userCol = await usersCollection();
+  const predCol = await predictionsCollection();
+  const users = await userCol.find({}).toArray();
+
+  let changed = 0;
+  let unchanged = 0;
+  let collisions = 0;
+  let predictionsMoved = 0;
+
+  for (const user of users) {
+    // Prefer the stored cédula (may still hold the "-X"); fall back to nit.
+    const newNit = canonicalNit(user.cedula ?? user.nit);
+    if (newNit.length < 6) {
+      unchanged++;
+      continue;
+    }
+    const newEmail = syntheticEmail(newNit);
+
+    if (newEmail === user._id) {
+      // Key already canonical; just make sure the cédula shows no "-X".
+      if (user.cedula !== newNit || user.nit !== newNit) {
+        await userCol.updateOne(
+          { _id: user._id },
+          { $set: { nit: newNit, cedula: newNit } },
+        );
+        changed++;
+      } else {
+        unchanged++;
+      }
+      continue;
+    }
+
+    // Key changes. Bail if a canonical record already exists (duplicate).
+    const existing = await userCol.findOne({ _id: newEmail });
+    if (existing) {
+      collisions++;
+      continue;
+    }
+
+    // Move this user's predictions to the new email/_id first.
+    const preds = await predCol
+      .find({ userEmail: user._id })
+      .toArray();
+    for (const p of preds) {
+      const moved: PredictionDoc = {
+        ...p,
+        _id: `${newEmail}#${p.attempt}`,
+        userEmail: newEmail,
+      };
+      await predCol.replaceOne({ _id: moved._id }, moved, { upsert: true });
+      if (moved._id !== p._id) await predCol.deleteOne({ _id: p._id });
+      predictionsMoved++;
+    }
+
+    // Recreate the user under the canonical key, then drop the old doc.
+    const newUser: UserDoc = {
+      ...user,
+      _id: newEmail,
+      email: newEmail,
+      nit: newNit,
+      cedula: newNit,
+    };
+    await userCol.replaceOne({ _id: newEmail }, newUser, { upsert: true });
+    await userCol.deleteOne({ _id: user._id });
+    changed++;
+  }
+
+  return {
+    scanned: users.length,
+    changed,
+    unchanged,
+    collisions,
+    predictionsMoved,
+  };
 }
 
 export async function getUserByEmail(email: string): Promise<UserDoc | null> {
