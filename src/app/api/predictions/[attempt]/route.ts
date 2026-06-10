@@ -1,10 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { emptyAttemptScore, scorePredictions } from "@/lib/scoring";
 import {
+  isGroupMatchLocked,
+  isKnockoutStageLocked,
+  stageFromMatchId,
+} from "@/lib/locks";
+import {
   getAllMatches,
   getPrediction,
   getUserByEmail,
-  isTournamentLocked,
   listAllPredictions,
   upsertPrediction,
 } from "@/lib/store";
@@ -160,14 +164,13 @@ export async function POST(
       { status: 403 },
     );
   }
-  if (await isTournamentLocked()) {
-    return NextResponse.json({ error: "Tournament locked" }, { status: 423 });
-  }
-
   let prediction = await loadOrCreate(email, attempt);
   if (prediction.status === "locked") {
     return NextResponse.json({ error: "Prediction locked" }, { status: 423 });
   }
+
+  // Per-match / per-stage edit locks (see src/lib/locks.ts).
+  const now = Date.now();
 
   if (body.kind === "group") {
     const home = Number(body.home);
@@ -182,12 +185,29 @@ export async function POST(
     ) {
       return NextResponse.json({ error: "Invalid score" }, { status: 400 });
     }
+    // Block the edit if this match already kicked off (or the group-fill
+    // deadline has passed). A played match cannot be changed.
+    const allMatches = await getAllMatches();
+    const match = allMatches.find((m) => m._id === body.matchId);
+    if (isGroupMatchLocked(match?.utcDate, now)) {
+      return NextResponse.json(
+        { error: "Este partido ya está cerrado." },
+        { status: 423 },
+      );
+    }
     const next: GroupScore = { home, away };
     prediction = {
       ...prediction,
       groupScores: { ...prediction.groupScores, [body.matchId]: next },
     };
   } else if (body.kind === "knockout") {
+    // Block the edit if this knockout round has already locked.
+    if (isKnockoutStageLocked(stageFromMatchId(body.matchId), now)) {
+      return NextResponse.json(
+        { error: "Esta fase ya está cerrada." },
+        { status: 423 },
+      );
+    }
     const home = body.home == null ? null : Number(body.home);
     const away = body.away == null ? null : Number(body.away);
     if (

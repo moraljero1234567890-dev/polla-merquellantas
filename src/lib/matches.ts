@@ -2,6 +2,7 @@ import { matches as staticMatches, flagSrc } from "@/data/worldcup2026";
 
 export type ApiMatch = {
   _id: string;
+  utcDate?: string;
   date: string;
   time: string;
   venue: string;

@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { formatDate } from "@/data/worldcup2026";
 import { computeGroupStandings, type StandingRow } from "@/lib/bracket";
+import { isGroupMatchLocked, isKnockoutStageLocked } from "@/lib/locks";
 import { staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
 import { displayTeam, normalizeTeam } from "@/lib/team-display";
@@ -206,12 +207,14 @@ function ScoreInput({
   onCommit,
   ariaLabel,
   size = "lg",
+  disabled = false,
 }: {
   value: number | null | undefined;
   onChange: (v: number | null) => void;
   onCommit?: () => void;
   ariaLabel: string;
   size?: "lg" | "sm";
+  disabled?: boolean;
 }) {
   const [text, setText] = useState<string>(
     value == null || value === undefined ? "" : String(value),
@@ -231,7 +234,9 @@ function ScoreInput({
       max={20}
       aria-label={ariaLabel}
       value={text}
+      disabled={disabled}
       onChange={(e) => {
+        if (disabled) return;
         const raw = e.target.value.replace(/[^0-9]/g, "");
         setText(raw);
         if (raw === "") {
@@ -245,7 +250,11 @@ function ScoreInput({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "Tab") onCommit?.();
       }}
-      className={`${sizeCls} border border-[var(--line)] bg-white text-center font-mono font-black tabular-nums outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20`}
+      className={`${sizeCls} border border-[var(--line)] text-center font-mono font-black tabular-nums outline-none transition ${
+        disabled
+          ? "cursor-not-allowed bg-[var(--surface)] text-[var(--foreground-muted)]"
+          : "bg-white focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+      }`}
     />
   );
 }
@@ -350,19 +359,28 @@ function GroupMatchRow({
   score,
   onChange,
   onCommit,
+  locked = false,
 }: {
   match: ApiMatch;
   score: GroupDraft | undefined;
   onChange: (home: number | null, away: number | null) => void;
   onCommit: () => void;
+  locked?: boolean;
 }) {
   const home = normalizeTeam(match.home);
   const away = normalizeTeam(match.away);
   return (
-    <li className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border border-[var(--line)] bg-white p-4 md:grid-cols-[120px_1fr_auto_1fr_auto]">
+    <li
+      className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 border p-4 md:grid-cols-[120px_1fr_auto_1fr_auto] ${
+        locked ? "border-[var(--line)] bg-[var(--surface)]" : "border-[var(--line)] bg-white"
+      }`}
+    >
       <div className="hidden font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)] md:block">
         <div>{formatDate(match.date)}</div>
         <div className="text-[var(--foreground)]">{match.time}</div>
+        {locked && (
+          <div className="mt-1 font-bold text-[var(--brand)]">Cerrado</div>
+        )}
       </div>
       <div className="md:justify-end">
         <TeamLink
@@ -380,6 +398,7 @@ function GroupMatchRow({
           onChange={(v) => onChange(v, score?.away ?? null)}
           onCommit={onCommit}
           ariaLabel={`${home.name} goles`}
+          disabled={locked}
         />
         <span className="font-mono text-xs font-bold text-[var(--foreground-muted)]">
           vs
@@ -389,6 +408,7 @@ function GroupMatchRow({
           onChange={(v) => onChange(score?.home ?? null, v)}
           onCommit={onCommit}
           ariaLabel={`${away.name} goles`}
+          disabled={locked}
         />
       </div>
       <div>
@@ -404,6 +424,9 @@ function GroupMatchRow({
       <div className="col-span-3 border-t border-dashed border-[var(--line)] pt-2 text-xs text-[var(--foreground-soft)] md:col-span-1 md:border-0 md:pt-0 md:text-right">
         <div className="md:hidden">
           {formatDate(match.date)} · {match.time}
+          {locked && (
+            <span className="ml-2 font-bold text-[var(--brand)]">· Cerrado</span>
+          )}
         </div>
         <div className="font-medium">{match.venue}</div>
         {match.city && (
@@ -420,12 +443,14 @@ function BracketCard({
   onCommit,
   onPickPenalty,
   size = "sm",
+  disabled = false,
 }: {
   pick: KnockoutPick;
   onChange: (home: number | null, away: number | null) => void;
   onCommit: () => void;
   onPickPenalty: (winner: "home" | "away") => void;
   size?: "sm" | "lg";
+  disabled?: boolean;
 }) {
   const isTie =
     pick.home != null && pick.away != null && pick.home === pick.away;
@@ -479,17 +504,22 @@ function BracketCard({
           onCommit={onCommit}
           ariaLabel={`${team.name} goles`}
           size={inputSize}
+          disabled={disabled}
         />
       </div>
     );
   };
 
   return (
-    <div className="w-full border border-[var(--line)] bg-white shadow-sm">
+    <div
+      className={`w-full border border-[var(--line)] shadow-sm ${
+        disabled ? "bg-[var(--surface)]" : "bg-white"
+      }`}
+    >
       {row("home", home, pick.home, (v) => onChange(v, pick.away))}
       <div className="h-px bg-[var(--line)]" />
       {row("away", away, pick.away, (v) => onChange(pick.home, v))}
-      {isTie && (
+      {isTie && !disabled && (
         <div className="border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
           <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-[var(--foreground-muted)]">
             Gana en penales
@@ -1253,6 +1283,7 @@ export default function PredictPage() {
                               score={groupDrafts[m._id]}
                               onChange={(h, a) => queueGroupSave(m._id, h, a)}
                               onCommit={() => flushMatch(m._id)}
+                              locked={isGroupMatchLocked(m.utcDate)}
                             />
                           ))}
                         </ul>
@@ -1337,11 +1368,16 @@ export default function PredictPage() {
                           (p) => p.home != null && p.away != null,
                         ).length;
                         const hasNextRound = colIdx < arr.length - 1;
+                        const stageLocked = isKnockoutStageLocked(col.stage);
                         return (
                           <BracketColumn
                             key={col.stage}
                             title={STAGE_TITLES[col.stage]}
-                            subtitle={`${filled}/${col.picks.length}`}
+                            subtitle={
+                              stageLocked
+                                ? "Cerrado"
+                                : `${filled}/${col.picks.length}`
+                            }
                             width={col.width}
                           >
                             {col.picks.map((p, i) => (
@@ -1352,6 +1388,7 @@ export default function PredictPage() {
                               >
                                 <BracketCard
                                   pick={p}
+                                  disabled={stageLocked}
                                   size={col.stage === "FINAL" ? "lg" : "sm"}
                                   onChange={(h, a) =>
                                     queueKnockoutSave(
@@ -1389,6 +1426,7 @@ export default function PredictPage() {
                       <BracketCard
                         pick={prediction.knockout.third}
                         size="lg"
+                        disabled={isKnockoutStageLocked("THIRD_PLACE")}
                         onChange={(h, a) =>
                           queueKnockoutSave(
                             prediction.knockout.third!.matchId,
