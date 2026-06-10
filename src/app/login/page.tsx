@@ -13,7 +13,6 @@ const MERQUE_LOGO = "/logos/merquellantas.png";
 export default function LoginPage() {
   const router = useRouter();
   const [cedula, setCedula] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -22,14 +21,9 @@ export default function LoginPage() {
     setError(null);
 
     const cleanCedula = cedula.replace(/\D/g, "");
-    const cleanPassword = password.replace(/\D/g, "");
 
     if (cleanCedula.length < 6) {
       setError("Ingresa tu cédula/NIT (al menos 6 dígitos).");
-      return;
-    }
-    if (cleanPassword !== cleanCedula) {
-      setError("La contraseña es tu misma cédula/NIT.");
       return;
     }
 
@@ -38,7 +32,8 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nit: cleanCedula, password: cleanPassword }),
+        // The cédula/NIT is the only credential (it doubles as the password).
+        body: JSON.stringify({ nit: cleanCedula, password: cleanCedula }),
       });
       if (!res.ok) {
         setError(
@@ -155,18 +150,32 @@ export default function LoginPage() {
         <div className="flex flex-1 items-center justify-center px-6 py-16 lg:px-16">
           <div className="w-full max-w-md">
             <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[var(--brand)]">
-              Iniciar sesión
+              Acceso de participantes
             </p>
             <h1 className="mt-3 text-3xl font-black leading-tight md:text-4xl">
-              Bienvenido de vuelta.
+              Ingresa a la Polla Mundialista
             </h1>
             <p className="mt-3 text-[var(--foreground-soft)]">
-              Usa tu cédula/NIT de cliente Merquellantas para entrar.
+              Juego promocional <strong>gratuito</strong> de Merquellantas para
+              sus clientes. Solo necesitas el número de cédula/NIT con el que tu
+              asesor te inscribió.
             </p>
+
+            <div className="mt-5 rounded-sm border border-emerald-600/40 bg-emerald-50 p-4 text-sm text-emerald-900">
+              <p className="font-semibold">Este sitio es seguro</p>
+              <p className="mt-1 leading-relaxed">
+                Portal oficial de Merquellantas.{" "}
+                <strong>
+                  Nunca pedimos contraseñas bancarias, datos de tarjetas ni
+                  pagos
+                </strong>
+                . Tu cédula/NIT solo se usa para identificarte dentro del juego.
+              </p>
+            </div>
 
             <form
               onSubmit={handleSubmit}
-              className="mt-10 space-y-5"
+              className="mt-8 space-y-5"
               noValidate
             >
               <div>
@@ -174,49 +183,29 @@ export default function LoginPage() {
                   htmlFor="cedula"
                   className="flex items-baseline justify-between font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--foreground-muted)]"
                 >
-                  <span>Cédula / NIT</span>
-                  <span className="text-[10px] tracking-[0.2em]">usuario</span>
+                  <span>Número de cédula / NIT</span>
+                  <span className="text-[10px] tracking-[0.2em]">
+                    para participar
+                  </span>
                 </label>
                 <input
                   id="cedula"
                   name="cedula"
                   type="text"
                   inputMode="numeric"
-                  autoComplete="username"
+                  autoComplete="off"
                   required
                   value={cedula}
                   onChange={(e) =>
                     setCedula(e.target.value.replace(/[^0-9-]/g, ""))
                   }
-                  placeholder="800130426-3"
+                  placeholder="Ej. 800130426"
                   className="mt-2 h-12 w-full border border-[var(--line)] bg-white px-4 font-mono text-base tabular-nums text-[var(--foreground)] outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="password"
-                  className="flex items-baseline justify-between font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--foreground-muted)]"
-                >
-                  <span>Contraseña</span>
-                  <span className="text-[10px] tracking-[0.2em]">
-                    tu cédula/NIT
-                  </span>
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) =>
-                    setPassword(e.target.value.replace(/[^0-9-]/g, ""))
-                  }
-                  placeholder="800130426-3"
-                  className="mt-2 h-12 w-full border border-[var(--line)] bg-white px-4 font-mono text-base tabular-nums text-[var(--foreground)] outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
-                />
+                <p className="mt-2 text-xs text-[var(--foreground-muted)]">
+                  Ese mismo número es tu acceso. No se requiere contraseña
+                  aparte.
+                </p>
               </div>
 
               {error && (
@@ -233,24 +222,9 @@ export default function LoginPage() {
                 disabled={submitting}
                 className="inline-flex h-12 w-full items-center justify-center rounded-sm bg-[var(--brand)] px-6 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--brand-dark)] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {submitting ? "Entrando…" : "Iniciar sesión"}
+                {submitting ? "Entrando…" : "Entrar al juego"}
               </button>
             </form>
-
-            <div className="mt-6 rounded-sm border border-[var(--line)] bg-[var(--surface)] p-4 text-sm text-[var(--foreground-soft)]">
-              <p className="font-semibold text-[var(--foreground)]">
-                Juego promocional de Merquellantas
-              </p>
-              <p className="mt-1 leading-relaxed">
-                Este es el portal oficial de la Polla Mundialista de
-                Merquellantas, sin costo para sus clientes.{" "}
-                <strong className="text-[var(--foreground)]">
-                  Nunca te pediremos datos de pago, claves bancarias ni números
-                  de tarjeta
-                </strong>{" "}
-                — solo tu cédula/NIT para identificarte.
-              </p>
-            </div>
 
             <div className="mt-6 text-sm text-[var(--foreground-soft)]">
               <p className="font-semibold text-[var(--foreground)]">
@@ -269,7 +243,6 @@ export default function LoginPage() {
             </div>
 
             <p className="mt-6 border-t border-[var(--line)] pt-4 text-xs text-[var(--foreground-muted)]">
-              {/* TODO: reemplaza con el NIT real de Merquellantas */}
               © {new Date().getFullYear()} Merquellantas ·{" "}
               <a
                 href="https://www.merquellantas.com"
@@ -278,7 +251,11 @@ export default function LoginPage() {
                 className="hover:text-[var(--brand)]"
               >
                 merquellantas.com
-              </a>
+              </a>{" "}
+              ·{" "}
+              <Link href="/terminos" className="hover:text-[var(--brand)]">
+                Términos y privacidad
+              </Link>
             </p>
           </div>
         </div>

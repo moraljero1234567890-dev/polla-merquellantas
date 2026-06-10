@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Polla Mundialista Merque",
+  title: "Polla Mundialista · Merquellantas (juego promocional gratuito)",
   description:
-    "La polla del Mundial de Merquellantas. Pronostica los partidos, suma puntos y gana premios.",
+    "Portal oficial de la Polla Mundialista de Merquellantas, un juego promocional gratuito para clientes. No solicitamos datos de pago ni claves bancarias; el acceso es solo con la cédula/NIT del cliente.",
   // Set GOOGLE_SITE_VERIFICATION in Vercel (the token Search Console gives
   // you, e.g. "abc123…") to verify ownership for the Safe Browsing review.
   verification: process.env.GOOGLE_SITE_VERIFICATION

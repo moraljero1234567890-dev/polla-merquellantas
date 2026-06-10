@@ -402,6 +402,12 @@ export default function Home() {
               >
                 servicliente@merquellantas.com
               </a>
+              <a
+                href="/terminos"
+                className="mt-2 block text-white/50 hover:text-[var(--brand)]"
+              >
+                Términos y privacidad
+              </a>
             </div>
           </div>
 
