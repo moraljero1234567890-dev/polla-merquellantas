@@ -44,8 +44,13 @@ export type MatchDoc = {
 export type UserDoc = {
   _id: string;
   email: string;
+  /** Cédula/NIT, digits only — used as both the username and the password. */
   nit: string;
+  /** Cédula/NIT exactly as entered/imported (may include the check digit). */
+  cedula?: string;
   name: string;
+  /** Salesperson the customer belongs to (VENDEDOR column). */
+  seller?: string;
   attemptsAllowed: number;
   createdAt: Date;
 };

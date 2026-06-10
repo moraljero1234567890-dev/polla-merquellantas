@@ -100,7 +100,10 @@ export async function GET(
       { status: 403 },
     );
   }
-  const prediction = await loadOrCreate(email, attempt);
+  const stored = await loadOrCreate(email, attempt);
+  // Rebuild the knockout bracket from the current group picks so it always
+  // reflects the official fixtures, even for predictions saved earlier.
+  const prediction = await recomputeKnockout(stored);
   // Scored against the full prediction pool so unique-exact bonuses are right.
   const [matches, allPredictions] = await Promise.all([
     getAllMatches(),

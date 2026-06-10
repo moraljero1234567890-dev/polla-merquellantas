@@ -11,7 +11,9 @@ const TOKEN_KEY = "polla:admin-token";
 type AdminUser = {
   email: string;
   nit: string;
+  cedula?: string;
   name: string;
+  seller?: string;
   attemptsAllowed: number;
   createdAt: string | Date;
 };
@@ -62,6 +64,9 @@ export default function AdminPage() {
   const [creating, setCreating] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [leaderboardStats, setLeaderboardStats] =
@@ -178,12 +183,15 @@ export default function AdminPage() {
     const cleanNit = nit.replace(/\D/g, "");
     const cleanName = name.trim();
     const n = Number(attempts);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setBanner({ kind: "err", text: "Correo inválido." });
       return;
     }
     if (cleanNit.length < 6) {
-      setBanner({ kind: "err", text: "El NIT debe tener al menos 6 dígitos." });
+      setBanner({
+        kind: "err",
+        text: "La cédula/NIT debe tener al menos 6 dígitos.",
+      });
       return;
     }
     if (!cleanName) {
@@ -203,8 +211,9 @@ export default function AdminPage() {
           authorization: `Bearer ${savedToken}`,
         },
         body: JSON.stringify({
-          email: cleanEmail,
+          email: cleanEmail || undefined,
           nit: cleanNit,
+          cedula: nit.trim(),
           name: cleanName,
           attemptsAllowed: n,
         }),
@@ -219,7 +228,7 @@ export default function AdminPage() {
       }
       setBanner({
         kind: "ok",
-        text: `Usuario "${cleanEmail}" creado con ${n} intento${n === 1 ? "" : "s"}.`,
+        text: `Usuario "${cleanName}" (${cleanNit}) creado con ${n} intento${n === 1 ? "" : "s"}.`,
       });
       setEmail("");
       setNit("");
@@ -233,6 +242,51 @@ export default function AdminPage() {
       });
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleImport(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!savedToken) {
+      setBanner({ kind: "err", text: "Guarda primero tu token de admin." });
+      return;
+    }
+    if (!importFile) {
+      setBanner({ kind: "err", text: "Selecciona un archivo .xlsx primero." });
+      return;
+    }
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await fetch("/api/admin/users/import", {
+        method: "POST",
+        headers: { authorization: `Bearer ${savedToken}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBanner({
+          kind: "err",
+          text: data.detail ?? data.error ?? `Error ${res.status}`,
+        });
+        return;
+      }
+      setBanner({
+        kind: "ok",
+        text: `Importados ${data.imported} usuario${data.imported === 1 ? "" : "s"}${
+          data.skipped ? ` · ${data.skipped} fila(s) omitida(s) sin cédula válida` : ""
+        }.`,
+      });
+      setImportFile(null);
+      await loadUsers(savedToken);
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        text: err instanceof Error ? err.message : "Error desconocido",
+      });
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -365,7 +419,21 @@ export default function AdminPage() {
           <form onSubmit={handleCreateUser} className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
-                Correo electrónico
+                Cédula / NIT (usuario y contraseña)
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={nit}
+                onChange={(e) => setNit(e.target.value.replace(/[^0-9-]/g, ""))}
+                placeholder="800130426-3"
+                className="mt-1 h-11 w-full border border-[var(--line)] bg-white px-3 font-mono tabular-nums outline-none focus:border-[var(--brand)]"
+                required
+              />
+            </label>
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
+                Correo (opcional)
               </span>
               <input
                 type="email"
@@ -373,21 +441,6 @@ export default function AdminPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="cliente@ejemplo.com"
                 className="mt-1 h-11 w-full border border-[var(--line)] bg-white px-3 outline-none focus:border-[var(--brand)]"
-                required
-              />
-            </label>
-            <label className="block">
-              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
-                NIT (sin puntos)
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={nit}
-                onChange={(e) => setNit(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="9001234567"
-                className="mt-1 h-11 w-full border border-[var(--line)] bg-white px-3 font-mono tabular-nums outline-none focus:border-[var(--brand)]"
-                required
               />
             </label>
             <label className="block md:col-span-2">
@@ -430,9 +483,49 @@ export default function AdminPage() {
         </section>
 
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
+          <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
+            3 · Importar usuarios desde Excel (.xlsx)
+          </h2>
+          <p className="mt-3 text-sm text-[var(--foreground-soft)]">
+            La primera fila debe tener los encabezados:{" "}
+            <code className="font-mono text-xs">CEDULA/NIT</code>,{" "}
+            <code className="font-mono text-xs">Etiquetas de fila</code>,{" "}
+            <code className="font-mono text-xs">VENTAS</code>,{" "}
+            <code className="font-mono text-xs"># ACCESOS</code>,{" "}
+            <code className="font-mono text-xs">VENDEDOR</code>. La cédula/NIT se
+            usa como usuario y contraseña; <strong># ACCESOS</strong> define los
+            intentos permitidos. Reimportar el mismo archivo actualiza los
+            usuarios sin borrar sus pronósticos.
+          </p>
+          <form
+            onSubmit={handleImport}
+            className="mt-4 flex flex-wrap items-center gap-3"
+          >
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="flex-1 min-w-[260px] text-sm file:mr-3 file:h-11 file:cursor-pointer file:border-0 file:bg-[var(--foreground)] file:px-4 file:text-xs file:font-semibold file:uppercase file:tracking-[0.18em] file:text-white"
+            />
+            <button
+              type="submit"
+              disabled={importing || !savedToken || !importFile}
+              className="h-11 bg-[var(--brand)] px-5 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--brand-dark)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {importing ? "Importando…" : "Importar"}
+            </button>
+          </form>
+          {importFile && (
+            <p className="mt-2 font-mono text-[11px] text-[var(--foreground-muted)]">
+              Archivo: {importFile.name}
+            </p>
+          )}
+        </section>
+
+        <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-              3 · Usuarios existentes
+              4 · Usuarios existentes
             </h2>
             <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
               {loading ? "Cargando…" : `${users.length} usuario${users.length === 1 ? "" : "s"}`}
@@ -453,12 +546,14 @@ export default function AdminPage() {
                 >
                   <div>
                     <p className="text-sm font-semibold">{u.name}</p>
-                    <p className="font-mono text-xs text-[var(--foreground-muted)]">
-                      {u.email}
-                    </p>
+                    {u.seller && (
+                      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--foreground-muted)]">
+                        Vendedor: {u.seller}
+                      </p>
+                    )}
                   </div>
                   <p className="font-mono text-xs text-[var(--foreground-soft)]">
-                    NIT {u.nit}
+                    Cédula/NIT {u.cedula ?? u.nit}
                   </p>
                   <span className="inline-flex w-fit items-center gap-2 border border-[var(--foreground)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em]">
                     {u.attemptsAllowed} intento
@@ -473,7 +568,7 @@ export default function AdminPage() {
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-              4 · Tabla de posiciones
+              5 · Tabla de posiciones
             </h2>
             <div className="flex items-center gap-3">
               <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
@@ -588,7 +683,7 @@ export default function AdminPage() {
 
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-            5 · Partidos del Mundial
+            6 · Partidos del Mundial
           </h2>
           <p className="mt-3 text-sm text-[var(--foreground-soft)]">
             Se cargan automáticamente la primera vez que alguien abre el

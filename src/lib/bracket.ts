@@ -112,26 +112,73 @@ export function isGroupStageComplete(
   });
 }
 
-const R32_TEMPLATE: Array<
-  | { home: { kind: "W" | "R"; group: string }; away: { kind: "W" | "R"; group: string } }
-  | { home: { kind: "W"; group: string }; away: { kind: "T"; rank: number } }
-> = [
-  { home: { kind: "W", group: "A" }, away: { kind: "T", rank: 1 } },
-  { home: { kind: "W", group: "B" }, away: { kind: "T", rank: 2 } },
-  { home: { kind: "W", group: "C" }, away: { kind: "T", rank: 3 } },
-  { home: { kind: "W", group: "D" }, away: { kind: "T", rank: 4 } },
-  { home: { kind: "W", group: "E" }, away: { kind: "T", rank: 5 } },
-  { home: { kind: "W", group: "F" }, away: { kind: "T", rank: 6 } },
-  { home: { kind: "W", group: "G" }, away: { kind: "T", rank: 7 } },
-  { home: { kind: "W", group: "H" }, away: { kind: "T", rank: 8 } },
-  { home: { kind: "W", group: "I" }, away: { kind: "R", group: "L" } },
-  { home: { kind: "W", group: "J" }, away: { kind: "R", group: "K" } },
-  { home: { kind: "W", group: "K" }, away: { kind: "R", group: "J" } },
-  { home: { kind: "W", group: "L" }, away: { kind: "R", group: "I" } },
-  { home: { kind: "R", group: "A" }, away: { kind: "R", group: "D" } },
-  { home: { kind: "R", group: "B" }, away: { kind: "R", group: "E" } },
-  { home: { kind: "R", group: "C" }, away: { kind: "R", group: "F" } },
-  { home: { kind: "R", group: "G" }, away: { kind: "R", group: "H" } },
+// Official FIFA World Cup 2026 bracket (matches 73–88), in order.
+// "W" = group winner, "R" = group runner-up, "T" = one of the 8 best
+// third-placed teams. Each "T" slot lists the groups FIFA allows that
+// third to come from (Annex C), which also guarantees a third never
+// faces a team from its own group in the round of 32.
+type SlotSpec =
+  | { kind: "W" | "R"; group: string }
+  | { kind: "T"; allowed: string[] };
+
+const R32_TEMPLATE: Array<{ home: SlotSpec; away: SlotSpec }> = [
+  // M73
+  { home: { kind: "R", group: "A" }, away: { kind: "R", group: "B" } },
+  // M74
+  { home: { kind: "W", group: "E" }, away: { kind: "T", allowed: ["A", "B", "C", "D", "F"] } },
+  // M75
+  { home: { kind: "W", group: "F" }, away: { kind: "R", group: "C" } },
+  // M76
+  { home: { kind: "W", group: "C" }, away: { kind: "R", group: "F" } },
+  // M77
+  { home: { kind: "W", group: "I" }, away: { kind: "T", allowed: ["C", "D", "F", "G", "H"] } },
+  // M78
+  { home: { kind: "R", group: "E" }, away: { kind: "R", group: "I" } },
+  // M79
+  { home: { kind: "W", group: "A" }, away: { kind: "T", allowed: ["C", "E", "F", "H", "I"] } },
+  // M80
+  { home: { kind: "W", group: "L" }, away: { kind: "T", allowed: ["E", "H", "I", "J", "K"] } },
+  // M81
+  { home: { kind: "W", group: "D" }, away: { kind: "T", allowed: ["B", "E", "F", "I", "J"] } },
+  // M82
+  { home: { kind: "W", group: "G" }, away: { kind: "T", allowed: ["A", "E", "H", "I", "J"] } },
+  // M83
+  { home: { kind: "R", group: "K" }, away: { kind: "R", group: "L" } },
+  // M84
+  { home: { kind: "W", group: "H" }, away: { kind: "R", group: "J" } },
+  // M85
+  { home: { kind: "W", group: "B" }, away: { kind: "T", allowed: ["E", "F", "G", "I", "J"] } },
+  // M86
+  { home: { kind: "W", group: "J" }, away: { kind: "R", group: "H" } },
+  // M87
+  { home: { kind: "W", group: "K" }, away: { kind: "T", allowed: ["D", "E", "I", "J", "L"] } },
+  // M88
+  { home: { kind: "R", group: "D" }, away: { kind: "R", group: "G" } },
+];
+
+// How each round connects to the previous one, by official match order.
+// R16 (matches 89–96): each entry holds the two R32 indices that feed it.
+const R16_FEED: Array<[number, number]> = [
+  [1, 4], // M89 = W74 vs W77
+  [0, 2], // M90 = W73 vs W75
+  [3, 5], // M91 = W76 vs W78
+  [6, 7], // M92 = W79 vs W80
+  [10, 11], // M93 = W83 vs W84
+  [8, 9], // M94 = W81 vs W82
+  [13, 15], // M95 = W86 vs W88
+  [12, 14], // M96 = W85 vs W87
+];
+// QF (matches 97–100): two R16 indices each.
+const QF_FEED: Array<[number, number]> = [
+  [0, 1], // M97 = W89 vs W90
+  [4, 5], // M98 = W93 vs W94
+  [2, 3], // M99 = W91 vs W92
+  [6, 7], // M100 = W95 vs W96
+];
+// SF (matches 101–102): two QF indices each.
+const SF_FEED: Array<[number, number]> = [
+  [0, 1], // M101 = W97 vs W98
+  [2, 3], // M102 = W99 vs W100
 ];
 
 function topThirdPlaced(
@@ -150,26 +197,92 @@ function topThirdPlaced(
     .slice(0, 8);
 }
 
+// Assign each qualifying third to a "T" slot whose allowed-groups list
+// contains its group, forming a complete matching. Most-constrained slot
+// first, so a valid assignment is always found when one exists.
+function assignThirdsToSlots(
+  slotAllowed: string[][],
+  thirdGroups: string[],
+): number[] | null {
+  const order = slotAllowed
+    .map((allowed, slot) => ({ slot, count: allowed.length }))
+    .sort((a, b) => a.count - b.count)
+    .map((o) => o.slot);
+
+  const usedThird = new Array(thirdGroups.length).fill(false);
+  const result = new Array(slotAllowed.length).fill(-1);
+
+  function backtrack(i: number): boolean {
+    if (i === order.length) return true;
+    const slot = order[i];
+    for (let t = 0; t < thirdGroups.length; t++) {
+      if (usedThird[t]) continue;
+      if (!slotAllowed[slot].includes(thirdGroups[t])) continue;
+      usedThird[t] = true;
+      result[slot] = t;
+      if (backtrack(i + 1)) return true;
+      usedThird[t] = false;
+      result[slot] = -1;
+    }
+    return false;
+  }
+
+  return backtrack(0) ? result : null;
+}
+
 export type R32SeedTeam = { code: string; name: string } | null;
 
 export function buildR32Seeds(
   standings: Record<string, StandingRow[]>,
 ): Array<{ home: R32SeedTeam; away: R32SeedTeam }> {
   const thirds = topThirdPlaced(standings);
-  const pick = (slot: { kind: "W" | "R" | "T"; group?: string; rank?: number }): R32SeedTeam => {
+  const thirdGroups = thirds.map((r) => r.group);
+
+  // Slots, in template order, that take a best-third team.
+  const thirdSlots: { templateIdx: number; side: "home" | "away"; allowed: string[] }[] = [];
+  R32_TEMPLATE.forEach((t, idx) => {
+    if (t.home.kind === "T") {
+      thirdSlots.push({ templateIdx: idx, side: "home", allowed: t.home.allowed });
+    }
+    if (t.away.kind === "T") {
+      thirdSlots.push({ templateIdx: idx, side: "away", allowed: t.away.allowed });
+    }
+  });
+
+  const assignment = assignThirdsToSlots(
+    thirdSlots.map((s) => s.allowed),
+    thirdGroups,
+  );
+  // Map "templateIdx:side" -> the assigned third row.
+  const thirdBySlotKey = new Map<string, StandingRow>();
+  if (assignment) {
+    thirdSlots.forEach((s, i) => {
+      const t = assignment[i];
+      if (t >= 0 && thirds[t]) {
+        thirdBySlotKey.set(`${s.templateIdx}:${s.side}`, thirds[t]);
+      }
+    });
+  }
+
+  const pick = (
+    slot: SlotSpec,
+    templateIdx: number,
+    side: "home" | "away",
+  ): R32SeedTeam => {
     if (slot.kind === "T") {
-      const row = thirds[(slot.rank ?? 1) - 1];
+      const row = thirdBySlotKey.get(`${templateIdx}:${side}`);
       return row ? { code: row.teamCode, name: row.teamName } : null;
     }
-    const rows = standings[slot.group!];
+    const rows = standings[slot.group];
     if (!rows) return null;
     const idx = slot.kind === "W" ? 0 : 1;
     const row = rows[idx];
     return row ? { code: row.teamCode, name: row.teamName } : null;
   };
-  return R32_TEMPLATE.map((t) => ({
-    home: pick(t.home),
-    away: pick(t.away),
+
+  return R32_TEMPLATE.map((t, idx) => ({
+    home: pick(t.home, idx, "home"),
+    away: pick(t.away, idx, "away"),
   }));
 }
 
@@ -239,8 +352,9 @@ export function buildKnockoutFromGroup(
 
   const r16: KnockoutPick[] = [];
   for (let i = 0; i < 8; i++) {
-    const winA = winnerOf(r32[i * 2]);
-    const winB = winnerOf(r32[i * 2 + 1]);
+    const [a, b] = R16_FEED[i];
+    const winA = winnerOf(r32[a]);
+    const winB = winnerOf(r32[b]);
     const id = `R16-${i + 1}`;
     const prev = existing?.r16?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "ROUND_OF_16", winA, winB);
@@ -257,8 +371,9 @@ export function buildKnockoutFromGroup(
 
   const qf: KnockoutPick[] = [];
   for (let i = 0; i < 4; i++) {
-    const winA = winnerOf(r16[i * 2]);
-    const winB = winnerOf(r16[i * 2 + 1]);
+    const [a, b] = QF_FEED[i];
+    const winA = winnerOf(r16[a]);
+    const winB = winnerOf(r16[b]);
     const id = `QF-${i + 1}`;
     const prev = existing?.qf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "QUARTER_FINALS", winA, winB);
@@ -275,8 +390,9 @@ export function buildKnockoutFromGroup(
 
   const sf: KnockoutPick[] = [];
   for (let i = 0; i < 2; i++) {
-    const winA = winnerOf(qf[i * 2]);
-    const winB = winnerOf(qf[i * 2 + 1]);
+    const [a, b] = SF_FEED[i];
+    const winA = winnerOf(qf[a]);
+    const winB = winnerOf(qf[b]);
     const id = `SF-${i + 1}`;
     const prev = existing?.sf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "SEMI_FINALS", winA, winB);

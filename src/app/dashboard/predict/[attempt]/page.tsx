@@ -712,6 +712,22 @@ const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
   FINAL: "Final",
 };
 
+// Display order so the visual bracket reads as a proper tree: consecutive
+// pairs in each column feed the next column in order (the underlying data
+// uses the official FIFA non-sequential match feeds — see bracket.ts).
+const BRACKET_ORDER: Record<string, number[]> = {
+  ROUND_OF_32: [1, 4, 0, 2, 10, 11, 8, 9, 3, 5, 6, 7, 13, 15, 12, 14],
+  ROUND_OF_16: [0, 1, 4, 5, 2, 3, 6, 7],
+  QUARTER_FINALS: [0, 1, 2, 3],
+  SEMI_FINALS: [0, 1],
+};
+
+function orderPicks(picks: KnockoutPick[], stage: string): KnockoutPick[] {
+  const order = BRACKET_ORDER[stage];
+  if (!order) return picks;
+  return order.map((i) => picks[i]).filter((p): p is KnockoutPick => Boolean(p));
+}
+
 export default function PredictPage() {
   const router = useRouter();
   const params = useParams<{ attempt: string }>();
@@ -1279,22 +1295,34 @@ export default function PredictPage() {
                         [
                           {
                             stage: "ROUND_OF_32" as const,
-                            picks: prediction.knockout.r32,
+                            picks: orderPicks(
+                              prediction.knockout.r32,
+                              "ROUND_OF_32",
+                            ),
                             width: 230,
                           },
                           {
                             stage: "ROUND_OF_16" as const,
-                            picks: prediction.knockout.r16,
+                            picks: orderPicks(
+                              prediction.knockout.r16,
+                              "ROUND_OF_16",
+                            ),
                             width: 220,
                           },
                           {
                             stage: "QUARTER_FINALS" as const,
-                            picks: prediction.knockout.qf,
+                            picks: orderPicks(
+                              prediction.knockout.qf,
+                              "QUARTER_FINALS",
+                            ),
                             width: 220,
                           },
                           {
                             stage: "SEMI_FINALS" as const,
-                            picks: prediction.knockout.sf,
+                            picks: orderPicks(
+                              prediction.knockout.sf,
+                              "SEMI_FINALS",
+                            ),
                             width: 220,
                           },
                           {

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { seedUsers } from "@/data/users";
 import { writeSession } from "@/lib/session";
 
 const HERO_IMAGE =
@@ -14,8 +13,8 @@ const MERQUE_LOGO =
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [nit, setNit] = useState("");
+  const [cedula, setCedula] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -23,15 +22,15 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
 
-    const trimmedEmail = email.trim();
-    const cleanNit = nit.replace(/\D/g, "");
+    const cleanCedula = cedula.replace(/\D/g, "");
+    const cleanPassword = password.replace(/\D/g, "");
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setError("Ingresa un correo válido.");
+    if (cleanCedula.length < 6) {
+      setError("Ingresa tu cédula/NIT (al menos 6 dígitos).");
       return;
     }
-    if (cleanNit.length < 6) {
-      setError("El NIT debe tener al menos 6 dígitos, sin puntos ni guiones.");
+    if (cleanPassword !== cleanCedula) {
+      setError("La contraseña es tu misma cédula/NIT.");
       return;
     }
 
@@ -40,11 +39,11 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, nit: cleanNit }),
+        body: JSON.stringify({ nit: cleanCedula, password: cleanPassword }),
       });
       if (!res.ok) {
         setError(
-          "No encontramos una cuenta con esas credenciales. Pregúntale a tu asesor Merquellantas.",
+          "No encontramos una cuenta con esa cédula/NIT. Pregúntale a tu asesor Merquellantas.",
         );
         setSubmitting(false);
         return;
@@ -63,13 +62,6 @@ export default function LoginPage() {
       setError("No pudimos validar tu sesión. Intenta de nuevo.");
       setSubmitting(false);
     }
-  }
-
-  function fillDemo() {
-    const demo = seedUsers[0];
-    setEmail(demo.email);
-    setNit(demo.nit);
-    setError(null);
   }
 
   return (
@@ -132,9 +124,9 @@ export default function LoginPage() {
               pronósticos.
             </h2>
             <p className="mt-5 text-white/75">
-              Ingresa con el correo y el NIT registrados con tu asesor
-              Merquellantas. Si no recuerdas tus datos, tu asesor puede
-              entregártelos de nuevo.
+              Ingresa con tu cédula o NIT registrado con tu asesor
+              Merquellantas. Tu contraseña es la misma cédula/NIT. Si no
+              recuerdas tus datos, tu asesor puede entregártelos de nuevo.
             </p>
           </div>
 
@@ -170,7 +162,7 @@ export default function LoginPage() {
               Bienvenido de vuelta.
             </h1>
             <p className="mt-3 text-[var(--foreground-soft)]">
-              Usa tus credenciales de cliente Merquellantas para entrar.
+              Usa tu cédula/NIT de cliente Merquellantas para entrar.
             </p>
 
             <form
@@ -180,46 +172,50 @@ export default function LoginPage() {
             >
               <div>
                 <label
-                  htmlFor="email"
-                  className="font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--foreground-muted)]"
+                  htmlFor="cedula"
+                  className="flex items-baseline justify-between font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--foreground-muted)]"
                 >
-                  Correo electrónico
+                  <span>Cédula / NIT</span>
+                  <span className="text-[10px] tracking-[0.2em]">usuario</span>
                 </label>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="cedula"
+                  name="cedula"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="username"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tucorreo@ejemplo.com"
-                  className="mt-2 h-12 w-full border border-[var(--line)] bg-white px-4 text-base text-[var(--foreground)] outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
+                  value={cedula}
+                  onChange={(e) =>
+                    setCedula(e.target.value.replace(/[^0-9-]/g, ""))
+                  }
+                  placeholder="800130426-3"
+                  className="mt-2 h-12 w-full border border-[var(--line)] bg-white px-4 font-mono text-base tabular-nums text-[var(--foreground)] outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
                 />
               </div>
 
               <div>
                 <label
-                  htmlFor="nit"
+                  htmlFor="password"
                   className="flex items-baseline justify-between font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--foreground-muted)]"
                 >
-                  <span>NIT</span>
+                  <span>Contraseña</span>
                   <span className="text-[10px] tracking-[0.2em]">
-                    sin puntos
+                    tu cédula/NIT
                   </span>
                 </label>
                 <input
-                  id="nit"
-                  name="nit"
-                  type="text"
+                  id="password"
+                  name="password"
+                  type="password"
                   inputMode="numeric"
-                  autoComplete="off"
+                  autoComplete="current-password"
                   required
-                  value={nit}
+                  value={password}
                   onChange={(e) =>
-                    setNit(e.target.value.replace(/[^0-9-]/g, ""))
+                    setPassword(e.target.value.replace(/[^0-9-]/g, ""))
                   }
-                  placeholder="9001234567"
+                  placeholder="800130426-3"
                   className="mt-2 h-12 w-full border border-[var(--line)] bg-white px-4 font-mono text-base tabular-nums text-[var(--foreground)] outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20"
                 />
               </div>

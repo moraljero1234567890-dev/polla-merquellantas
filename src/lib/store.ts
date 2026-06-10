@@ -47,31 +47,94 @@ export async function findUserByCredentials(
   return col.findOne({ email: cleanEmail, nit: cleanNit });
 }
 
+export async function findUserByNit(nit: string): Promise<UserDoc | null> {
+  const col = await usersCollection();
+  const cleanNit = nit.replace(/\D/g, "");
+  if (!cleanNit) return null;
+  return col.findOne({ nit: cleanNit });
+}
+
+/** Internal email key synthesized from a cédula when none is provided. */
+export function syntheticEmail(nit: string): string {
+  return `${nit.replace(/\D/g, "")}@polla.local`;
+}
+
 export async function listAllUsers(): Promise<UserDoc[]> {
   const col = await usersCollection();
   return col.find({}).sort({ createdAt: -1 }).toArray();
 }
 
 export async function createUser(input: {
-  email: string;
+  email?: string;
   nit: string;
+  cedula?: string;
   name: string;
+  seller?: string;
   attemptsAllowed: number;
 }): Promise<UserDoc> {
   await ensureUsersIndex();
   const col = await usersCollection();
-  const email = input.email.trim().toLowerCase();
   const nit = input.nit.replace(/\D/g, "");
+  const email = (input.email?.trim().toLowerCase() || syntheticEmail(nit));
   const doc: UserDoc = {
     _id: email,
     email,
     nit,
+    cedula: input.cedula?.trim() || undefined,
     name: input.name.trim(),
+    seller: input.seller?.trim() || undefined,
     attemptsAllowed: Math.max(1, Math.min(20, Math.floor(input.attemptsAllowed))),
     createdAt: new Date(),
   };
   await col.replaceOne({ _id: doc._id }, doc, { upsert: true });
   return doc;
+}
+
+export type BulkUserInput = {
+  nit: string;
+  cedula?: string;
+  name: string;
+  seller?: string;
+  attemptsAllowed: number;
+};
+
+/**
+ * Insert/update many users at once (XLSX import). Keyed by the synthetic
+ * email derived from the cédula, so re-importing the same sheet updates
+ * existing users without touching their predictions.
+ */
+export async function bulkUpsertUsers(
+  rows: BulkUserInput[],
+): Promise<{ count: number }> {
+  await ensureUsersIndex();
+  const col = await usersCollection();
+  const ops = rows
+    .map((r) => {
+      const nit = r.nit.replace(/\D/g, "");
+      if (!nit) return null;
+      const email = syntheticEmail(nit);
+      const doc: UserDoc = {
+        _id: email,
+        email,
+        nit,
+        cedula: r.cedula?.trim() || undefined,
+        name: r.name.trim(),
+        seller: r.seller?.trim() || undefined,
+        attemptsAllowed: Math.max(1, Math.min(20, Math.floor(r.attemptsAllowed))),
+        createdAt: new Date(),
+      };
+      return {
+        replaceOne: {
+          filter: { _id: doc._id },
+          replacement: doc,
+          upsert: true,
+        },
+      };
+    })
+    .filter((op): op is NonNullable<typeof op> => op !== null);
+  if (ops.length === 0) return { count: 0 };
+  await col.bulkWrite(ops, { ordered: false });
+  return { count: ops.length };
 }
 
 export async function getUserByEmail(email: string): Promise<UserDoc | null> {

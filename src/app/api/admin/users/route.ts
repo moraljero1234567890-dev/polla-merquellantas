@@ -14,7 +14,9 @@ export async function GET(request: NextRequest) {
       users: users.map((u) => ({
         email: u.email,
         nit: u.nit,
+        cedula: u.cedula,
         name: u.name,
+        seller: u.seller,
         attemptsAllowed: u.attemptsAllowed,
         createdAt: u.createdAt,
       })),
@@ -35,7 +37,9 @@ export async function POST(request: NextRequest) {
   let body: {
     email?: string;
     nit?: string;
+    cedula?: string;
     name?: string;
+    seller?: string;
     attemptsAllowed?: number;
   };
   try {
@@ -47,7 +51,8 @@ export async function POST(request: NextRequest) {
   const nit = (body.nit ?? "").replace(/\D/g, "");
   const name = (body.name ?? "").trim();
   const attemptsAllowed = Number(body.attemptsAllowed);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // Email is optional — one is synthesized from the cédula when omitted.
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
   if (nit.length < 6) {
@@ -70,12 +75,21 @@ export async function POST(request: NextRequest) {
     );
   }
   try {
-    const user = await createUser({ email, nit, name, attemptsAllowed });
+    const user = await createUser({
+      email: email || undefined,
+      nit,
+      cedula: body.cedula?.trim() || undefined,
+      name,
+      seller: body.seller?.trim() || undefined,
+      attemptsAllowed,
+    });
     return NextResponse.json({
       user: {
         email: user.email,
         nit: user.nit,
+        cedula: user.cedula,
         name: user.name,
+        seller: user.seller,
         attemptsAllowed: user.attemptsAllowed,
         createdAt: user.createdAt,
       },
