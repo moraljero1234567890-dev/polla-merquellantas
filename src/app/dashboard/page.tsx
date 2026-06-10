@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearSession, readSession, type Session } from "@/lib/session";
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 type AttemptSummary = {
   attempt: number;

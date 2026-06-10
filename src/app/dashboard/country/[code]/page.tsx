@@ -4,8 +4,7 @@ import { loadCountry } from "@/lib/country-data";
 
 export const revalidate = 86400;
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 function Stat({
   label,

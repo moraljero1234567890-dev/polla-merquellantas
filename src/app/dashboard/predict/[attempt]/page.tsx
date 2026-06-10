@@ -194,8 +194,7 @@ function HoverCard({
   );
 }
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 

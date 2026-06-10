@@ -8,8 +8,7 @@ import { writeSession } from "@/lib/session";
 const HERO_IMAGE =
   "https://media.cnn.com/api/v1/images/stellar/prod/221219105607-messi-crowd-world-cup-121822.jpg?q=w_3000,c_fill";
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -238,6 +237,21 @@ export default function LoginPage() {
               </button>
             </form>
 
+            <div className="mt-6 rounded-sm border border-[var(--line)] bg-[var(--surface)] p-4 text-sm text-[var(--foreground-soft)]">
+              <p className="font-semibold text-[var(--foreground)]">
+                Juego promocional de Merquellantas
+              </p>
+              <p className="mt-1 leading-relaxed">
+                Este es el portal oficial de la Polla Mundialista de
+                Merquellantas, sin costo para sus clientes.{" "}
+                <strong className="text-[var(--foreground)]">
+                  Nunca te pediremos datos de pago, claves bancarias ni números
+                  de tarjeta
+                </strong>{" "}
+                — solo tu cédula/NIT para identificarte.
+              </p>
+            </div>
+
             <div className="mt-6 text-sm text-[var(--foreground-soft)]">
               <p className="font-semibold text-[var(--foreground)]">
                 ¿No tienes acceso?
@@ -253,6 +267,19 @@ export default function LoginPage() {
                 </Link>
               </p>
             </div>
+
+            <p className="mt-6 border-t border-[var(--line)] pt-4 text-xs text-[var(--foreground-muted)]">
+              {/* TODO: reemplaza con el NIT real de Merquellantas */}
+              © {new Date().getFullYear()} Merquellantas ·{" "}
+              <a
+                href="https://www.merquellantas.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[var(--brand)]"
+              >
+                merquellantas.com
+              </a>
+            </p>
           </div>
         </div>
       </main>

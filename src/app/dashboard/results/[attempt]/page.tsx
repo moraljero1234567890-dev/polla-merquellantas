@@ -12,8 +12,7 @@ import type { AttemptScore } from "@/lib/scoring";
 import { displayTeam, flagUrl, normalizeTeam } from "@/lib/team-display";
 import type { KnockoutPick, PredictionDoc } from "@/lib/types";
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
   ROUND_OF_32: "Dieciseisavos",

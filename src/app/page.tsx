@@ -3,26 +3,13 @@ import SiteHeader from "@/components/SiteHeader";
 const HERO_IMAGE =
   "https://media.cnn.com/api/v1/images/stellar/prod/221219105607-messi-crowd-world-cup-121822.jpg?q=w_3000,c_fill";
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 const partners = [
-  {
-    name: "Marca aliada",
-    src: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSdxzcuqEmKNIege1w1_FpRL4av13KPdpA4g&s",
-  },
-  {
-    name: "Marca aliada",
-    src: "https://www.muchoneumatico.com/blog/wp-content/uploads/2023/01/El-logo-de-Neumaticos-Aplus.jpg",
-  },
-  {
-    name: "Marca aliada",
-    src: "https://upload.wikimedia.org/wikipedia/en/thumb/5/54/TotalEnergies_logo.svg/1280px-TotalEnergies_logo.svg.png",
-  },
-  {
-    name: "Marca aliada",
-    src: "https://upload.wikimedia.org/wikipedia/commons/8/88/Hankook_logo_as_of_2019.png",
-  },
+  { name: "Marca aliada", src: "/logos/sponsor.png" },
+  { name: "A Plus", src: "/logos/aplus.jpg" },
+  { name: "TotalEnergies", src: "/logos/totalenergies.png" },
+  { name: "Hankook", src: "/logos/hankook.png" },
 ];
 
 const groupRows = [
@@ -358,21 +345,76 @@ export default function Home() {
       </main>
 
       <footer className="bg-[var(--foreground)] text-white/70">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-10 text-sm md:flex-row">
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={MERQUE_LOGO}
-              alt="Merquellantas"
-              className="h-7 w-auto brightness-0 invert"
-            />
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="grid gap-8 md:grid-cols-[1.4fr_1fr_1fr]">
+            <div>
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={MERQUE_LOGO}
+                  alt="Merquellantas"
+                  className="h-7 w-auto brightness-0 invert"
+                />
+                <span className="text-sm font-semibold text-white">
+                  Polla Mundialista
+                </span>
+              </div>
+              <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/60">
+                Juego promocional sin costo, organizado por Merquellantas para
+                sus clientes. <strong className="text-white/80">No</strong>{" "}
+                solicitamos datos de pago, claves bancarias ni información de
+                tarjetas. Tu acceso es únicamente con tu cédula/NIT registrado
+                con tu asesor.
+              </p>
+            </div>
+
+            <div className="text-sm">
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/40">
+                Empresa
+              </p>
+              {/* TODO: reemplaza con los datos legales reales de Merquellantas */}
+              <p className="mt-3 text-white/70">Merquellantas</p>
+              <p className="mt-1 text-white/50">NIT __.___.___-_</p>
+              <p className="mt-1 text-white/50">Colombia</p>
+              <a
+                href="https://www.merquellantas.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-[var(--brand)] underline-offset-4 hover:underline"
+              >
+                www.merquellantas.com
+              </a>
+            </div>
+
+            <div className="text-sm">
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/40">
+                Contacto y soporte
+              </p>
+              <a
+                href="#asesor"
+                className="mt-3 inline-block text-white/70 hover:text-[var(--brand)]"
+              >
+                Hablar con mi asesor
+              </a>
+              <a
+                href="mailto:servicliente@merquellantas.com"
+                className="mt-2 block text-white/50 hover:text-[var(--brand)]"
+              >
+                servicliente@merquellantas.com
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/45 md:flex-row md:items-center">
             <span>
-              © {new Date().getFullYear()} · Polla Mundialista Merque
+              © {new Date().getFullYear()} Merquellantas · Polla Mundialista.
+              Todos los derechos reservados.
+            </span>
+            <span>
+              Promoción dirigida a clientes Merquellantas. Aplican términos y
+              condiciones.
             </span>
           </div>
-          <p className="text-white/50">
-            Beneficio exclusivo para clientes Merquellantas.
-          </p>
         </div>
       </footer>
     </div>

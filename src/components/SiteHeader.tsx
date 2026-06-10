@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-const MERQUE_LOGO =
-  "https://www.merquellantas.com/assets/images/logo/Logo-Merquellantas.png";
+const MERQUE_LOGO = "/logos/merquellantas.png";
 
 const navLinks = [
   { href: "#participar", label: "Cómo participar" },
