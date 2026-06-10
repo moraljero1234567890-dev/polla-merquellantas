@@ -47,6 +47,27 @@ type LeaderboardStats = {
   finishedKnockoutMatches: number;
 };
 
+type ActivityRow = {
+  email: string;
+  name: string;
+  cedula: string;
+  attempt: number;
+  status: "draft" | "complete" | "locked";
+  groupFilled: number;
+  totalGroup: number;
+  knockoutFilled: number;
+  champion: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+};
+
+type ActivityStats = {
+  totalUsers: number;
+  usersWithPredictions: number;
+  totalPredictions: number;
+  totalGroup: number;
+};
+
 type Banner = { kind: "ok" | "err"; text: string } | null;
 
 export default function AdminPage() {
@@ -72,6 +93,12 @@ export default function AdminPage() {
   const [leaderboardStats, setLeaderboardStats] =
     useState<LeaderboardStats | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(
+    null,
+  );
+  const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -150,12 +177,43 @@ export default function AdminPage() {
     }
   }, []);
 
+  const loadActivity = useCallback(async (t: string) => {
+    if (!t) {
+      setActivity([]);
+      setActivityStats(null);
+      return;
+    }
+    setActivityLoading(true);
+    try {
+      const res = await fetch("/api/admin/activity", {
+        headers: { authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) {
+        setActivity([]);
+        setActivityStats(null);
+        return;
+      }
+      const data = (await res.json()) as {
+        rows: ActivityRow[];
+        stats: ActivityStats;
+      };
+      setActivity(data.rows);
+      setActivityStats(data.stats);
+    } catch {
+      setActivity([]);
+      setActivityStats(null);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (savedToken) {
       void loadUsers(savedToken);
       void loadLeaderboard(savedToken);
+      void loadActivity(savedToken);
     }
-  }, [savedToken, loadUsers, loadLeaderboard]);
+  }, [savedToken, loadUsers, loadLeaderboard, loadActivity]);
 
   function handleSaveToken(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -170,6 +228,8 @@ export default function AdminPage() {
     setUsers([]);
     setLeaderboard([]);
     setLeaderboardStats(null);
+    setActivity([]);
+    setActivityStats(null);
     setBanner(null);
   }
 
@@ -643,7 +703,122 @@ export default function AdminPage() {
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-              5 · Tabla de posiciones
+              5 · Pronósticos registrados
+            </h2>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
+                {activityLoading
+                  ? "Cargando…"
+                  : activityStats
+                    ? `${activityStats.usersWithPredictions}/${activityStats.totalUsers} usuarios · ${activityStats.totalPredictions} boleta${activityStats.totalPredictions === 1 ? "" : "s"}`
+                    : "—"}
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadActivity(savedToken)}
+                disabled={!savedToken || activityLoading}
+                className="h-9 border border-[var(--line)] px-4 text-xs font-semibold uppercase tracking-[0.18em] transition hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:opacity-50"
+              >
+                Actualizar
+              </button>
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-[var(--foreground-soft)]">
+            Usuarios que ya entraron y llenaron pronósticos, con su avance por
+            boleta.
+          </p>
+          {activity.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--foreground-muted)]">
+              {savedToken
+                ? "Todavía nadie ha registrado pronósticos."
+                : "Guarda tu token para ver la actividad."}
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--foreground)] font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--foreground-muted)]">
+                    <th className="py-2 pr-3">Usuario</th>
+                    <th className="py-2 pr-3">Cédula/NIT</th>
+                    <th className="py-2 pr-3 text-center">Boleta</th>
+                    <th className="py-2 pr-3 text-center">Grupos</th>
+                    <th className="py-2 pr-3 text-center">Elim.</th>
+                    <th className="py-2 pr-3">Estado</th>
+                    <th className="py-2 pr-3">Campeón</th>
+                    <th className="py-2 pr-3">Actualizado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.map((r) => {
+                    const groupDone =
+                      r.totalGroup > 0 && r.groupFilled >= r.totalGroup;
+                    return (
+                      <tr
+                        key={`${r.email}-${r.attempt}`}
+                        className="border-b border-[var(--line)]"
+                      >
+                        <td className="py-3 pr-3 font-semibold">{r.name}</td>
+                        <td className="py-3 pr-3 font-mono text-xs text-[var(--foreground-soft)]">
+                          {r.cedula}
+                        </td>
+                        <td className="py-3 pr-3 text-center font-mono tabular-nums">
+                          {r.attempt}
+                        </td>
+                        <td
+                          className={
+                            "py-3 pr-3 text-center font-mono tabular-nums " +
+                            (groupDone
+                              ? "text-emerald-700"
+                              : "text-[var(--foreground)]")
+                          }
+                        >
+                          {r.groupFilled}/{r.totalGroup || "—"}
+                        </td>
+                        <td className="py-3 pr-3 text-center font-mono tabular-nums">
+                          {r.knockoutFilled}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span
+                            className={
+                              "inline-flex border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] " +
+                              (r.status === "complete" || r.status === "locked"
+                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                : "border-[var(--line)] text-[var(--foreground-muted)]")
+                            }
+                          >
+                            {r.status === "complete"
+                              ? "Completa"
+                              : r.status === "locked"
+                                ? "Bloqueada"
+                                : "En progreso"}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-3 text-[var(--foreground-soft)]">
+                          {r.champion ?? "—"}
+                        </td>
+                        <td className="py-3 pr-3 font-mono text-[11px] text-[var(--foreground-muted)]">
+                          {r.updatedAt
+                            ? new Date(r.updatedAt).toLocaleDateString("es-CO", {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 border border-[var(--line)] bg-white p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
+              6 · Tabla de posiciones
             </h2>
             <div className="flex items-center gap-3">
               <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
@@ -758,7 +933,7 @@ export default function AdminPage() {
 
         <section className="mt-8 border border-[var(--line)] bg-white p-6">
           <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-            6 · Partidos del Mundial
+            7 · Partidos del Mundial
           </h2>
           <p className="mt-3 text-sm text-[var(--foreground-soft)]">
             Se cargan automáticamente la primera vez que alguien abre el
