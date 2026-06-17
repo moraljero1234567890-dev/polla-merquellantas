@@ -1,23 +1,35 @@
 import "server-only";
 import {
   matchesCollection,
+  metaCollection,
   predictionsCollection,
   usersCollection,
 } from "./mongodb";
 import { fetchLatestFromConfiguredProvider } from "./providers";
+import { fetchMatchesFromWikipedia } from "./wikipedia";
 import { buildMatchSeed } from "./seed-data";
-import type { MatchDoc, PredictionDoc, UserDoc } from "./types";
+import type { MatchDoc, PredictionDoc, Score, UserDoc } from "./types";
 
 async function ensureMatchesSeeded(): Promise<void> {
   const col = await matchesCollection();
   const count = await col.estimatedDocumentCount();
   if (count > 0) return;
   let docs: MatchDoc[] = [];
+  // Wikipedia is the source of truth for the real 2026 draw + live results, so
+  // seed from it first — this keeps the stored _id/team-code scheme identical
+  // to what refreshMatchScores() folds results onto later.
   try {
-    const result = await fetchLatestFromConfiguredProvider();
-    docs = result.docs;
+    docs = await fetchMatchesFromWikipedia();
   } catch (err) {
-    console.warn("Failed to fetch from provider, using static seed:", err);
+    console.warn("Wikipedia seed failed, trying configured provider:", err);
+  }
+  if (docs.length === 0) {
+    try {
+      const result = await fetchLatestFromConfiguredProvider();
+      docs = result.docs;
+    } catch (err) {
+      console.warn("Failed to fetch from provider, using static seed:", err);
+    }
   }
   if (docs.length === 0) docs = buildMatchSeed();
   if (docs.length === 0) return;
@@ -35,6 +47,145 @@ export async function getAllMatches(): Promise<MatchDoc[]> {
   await ensureMatchesSeeded();
   const col = await matchesCollection();
   return col.find({}).sort({ utcDate: 1 }).toArray();
+}
+
+/** Don't hit the upstream provider more than once per this window. */
+const REFRESH_MIN_INTERVAL_MS = 60_000;
+const REFRESH_META_ID = "matchScoresRefresh";
+
+export type RefreshResult = {
+  refreshed: boolean;
+  /** Why the Wikipedia fetch was skipped, if it was. */
+  skipped?: "throttled" | "no-data" | "error";
+  source?: string;
+  /** Existing match docs whose score/status changed. */
+  updated?: number;
+  /** Real knockout fixtures inserted as teams get decided. */
+  inserted?: number;
+  /** Wikipedia rows that matched no stored fixture (kept for diagnostics). */
+  unmatched?: number;
+  error?: string;
+};
+
+/** Identity key shared by the static seed and Wikipedia: each pair of teams
+ * meets once per group, so group + the unordered code pair is unique. */
+function identityKey(
+  stage: string,
+  group: string | null,
+  codeA: string,
+  codeB: string,
+): string | null {
+  const a = codeA.trim().toLowerCase();
+  const b = codeB.trim().toLowerCase();
+  if (!a || !b) return null; // TBD knockout slot — can't bridge yet.
+  // Codes can contain "-" (gb-eng), so join with "~" to keep pairs unambiguous.
+  return `${stage}|${group ?? ""}|${[a, b].sort().join("~")}`;
+}
+
+/** Re-orient a Wikipedia score so home/away line up with the stored fixture,
+ * which may list the same two teams in the opposite order. */
+function orientScore(
+  storedHomeCode: string,
+  wiki: MatchDoc,
+): MatchDoc["score"] {
+  if (!wiki.score) return null;
+  const swap = storedHomeCode.trim().toLowerCase() !== wiki.home.code;
+  if (!swap) return wiki.score;
+  const flip = (s: Score | null): Score | null =>
+    s ? { home: s.away, away: s.home } : null;
+  return {
+    fullTime: flip(wiki.score.fullTime),
+    halfTime: flip(wiki.score.halfTime),
+    penalties: flip(wiki.score.penalties),
+  };
+}
+
+/**
+ * Fetch live results from Wikipedia and fold them onto the fixtures we already
+ * store, so points reflect real outcomes. Group results update the existing
+ * doc IN PLACE (matched by team identity, not _id) — predictions are keyed by
+ * the stored _id, and the static seed uses a different id scheme than
+ * Wikipedia, so updating in place is what keeps points landing without
+ * creating duplicate fixtures. Only `status`/`score` change; the stored
+ * schedule and edit-lock timing are left untouched. Knockout fixtures that
+ * don't exist yet are inserted once both teams are known, enabling
+ * champion/runner-up scoring as the bracket fills in.
+ *
+ * Throttled to ≤1 Wikipedia call/min so a burst of logins stays cheap, and it
+ * never throws — a Wikipedia hiccup must not break sign-in.
+ */
+export async function refreshMatchScores(opts?: {
+  force?: boolean;
+}): Promise<RefreshResult> {
+  try {
+    const meta = await metaCollection();
+    const now = new Date();
+    if (!opts?.force) {
+      const last = await meta.findOne({ _id: REFRESH_META_ID });
+      if (
+        last?.updatedAt &&
+        now.getTime() - new Date(last.updatedAt).getTime() <
+          REFRESH_MIN_INTERVAL_MS
+      ) {
+        return { refreshed: false, skipped: "throttled" };
+      }
+    }
+    // Claim the window up front so concurrent logins don't all fan out.
+    await meta.updateOne(
+      { _id: REFRESH_META_ID },
+      { $set: { updatedAt: now } },
+      { upsert: true },
+    );
+
+    const wikiMatches = await fetchMatchesFromWikipedia();
+    if (!wikiMatches.length) {
+      return { refreshed: false, skipped: "no-data", source: "wikipedia" };
+    }
+
+    const col = await matchesCollection();
+    const stored = await col.find({}).toArray();
+    const storedByIdentity = new Map<string, MatchDoc>();
+    for (const m of stored) {
+      const key = identityKey(m.stage, m.group, m.home.code, m.away.code);
+      if (key) storedByIdentity.set(key, m);
+    }
+
+    let updated = 0;
+    let inserted = 0;
+    let unmatched = 0;
+    for (const w of wikiMatches) {
+      const key = identityKey(w.stage, w.group, w.home.code, w.away.code);
+      const existing = key ? storedByIdentity.get(key) : undefined;
+
+      if (existing) {
+        const score = orientScore(existing.home.code, w);
+        // Mirror Wikipedia's truth, but never wipe a real score back to null.
+        if (w.status === existing.status && !score) {
+          continue;
+        }
+        const res = await col.updateOne(
+          { _id: existing._id },
+          { $set: { status: w.status, score } },
+        );
+        if (res.modifiedCount > 0) updated += 1;
+      } else if (w.stage !== "GROUP_STAGE" && key) {
+        // A real knockout fixture we don't have yet (both teams now known).
+        // Safe to insert: knockout scoring reads winner codes, not _ids.
+        await col.replaceOne({ _id: w._id }, w, { upsert: true });
+        inserted += 1;
+      } else {
+        unmatched += 1;
+      }
+    }
+
+    return { refreshed: true, source: "wikipedia", updated, inserted, unmatched };
+  } catch (err) {
+    return {
+      refreshed: false,
+      skipped: "error",
+      error: err instanceof Error ? err.message : "unknown",
+    };
+  }
 }
 
 export async function findUserByCredentials(

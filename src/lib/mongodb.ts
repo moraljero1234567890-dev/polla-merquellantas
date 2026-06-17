@@ -1,6 +1,9 @@
 import { MongoClient, type Db, type Collection } from "mongodb";
 import type { MatchDoc, PredictionDoc, UserDoc } from "./types";
 
+/** Small key/value collection for bookkeeping (e.g. last live-score refresh). */
+export type MetaDoc = { _id: string; updatedAt: Date };
+
 declare global {
   // eslint-disable-next-line no-var
   var _mongoClientPromise: Promise<MongoClient> | undefined;
@@ -39,6 +42,11 @@ export async function predictionsCollection(): Promise<
 > {
   const db = await getDb();
   return db.collection<PredictionDoc>("predictions");
+}
+
+export async function metaCollection(): Promise<Collection<MetaDoc>> {
+  const db = await getDb();
+  return db.collection<MetaDoc>("meta");
 }
 
 export default getClientPromise;

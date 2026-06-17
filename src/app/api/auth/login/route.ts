@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canonicalNit, findUserByNit } from "@/lib/store";
+import { canonicalNit, findUserByNit, refreshMatchScores } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +27,20 @@ export async function POST(request: Request) {
     const user = await findUserByNit(nit);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 401 });
+    }
+    // A successful login is our cue to pull the latest results from Wikipedia
+    // so points are current. It's throttled (≤1 fetch/min) and never throws,
+    // so it adds no meaningful latency on most logins and can't break sign-in.
+    const refresh = await refreshMatchScores();
+    if (refresh.refreshed && refresh.unmatched) {
+      // Group fixtures that didn't bridge by team identity → the stored team
+      // codes and Wikipedia's differ for those teams. Surface it in the logs
+      // instead of silently leaving those matches unscored.
+      console.warn(
+        `refreshMatchScores: ${refresh.unmatched} Wikipedia match(es) did ` +
+          `not map to a stored group fixture (updated=${refresh.updated}, ` +
+          `inserted=${refresh.inserted}). Check team-code mapping.`,
+      );
     }
     return NextResponse.json({
       user: {

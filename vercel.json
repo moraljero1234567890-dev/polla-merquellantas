@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/admin/refresh-matches?token=__SET_ADMIN_TOKEN_IN_ENV__",
+      "path": "/api/admin/refresh-matches?mode=scores",
       "schedule": "0 6 * * *"
     }
   ]
