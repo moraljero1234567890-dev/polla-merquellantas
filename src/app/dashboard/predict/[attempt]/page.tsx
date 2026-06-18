@@ -1368,7 +1368,11 @@ export default function PredictPage() {
                           (p) => p.home != null && p.away != null,
                         ).length;
                         const hasNextRound = colIdx < arr.length - 1;
-                        const stageLocked = isKnockoutStageLocked(col.stage);
+                        const stageLocked = isKnockoutStageLocked(
+                          col.stage,
+                          Date.now(),
+                          session?.nit,
+                        );
                         return (
                           <BracketColumn
                             key={col.stage}
@@ -1426,7 +1430,11 @@ export default function PredictPage() {
                       <BracketCard
                         pick={prediction.knockout.third}
                         size="lg"
-                        disabled={isKnockoutStageLocked("THIRD_PLACE")}
+                        disabled={isKnockoutStageLocked(
+                          "THIRD_PLACE",
+                          Date.now(),
+                          session?.nit,
+                        )}
                         onChange={(h, a) =>
                           queueKnockoutSave(
                             prediction.knockout.third!.matchId,

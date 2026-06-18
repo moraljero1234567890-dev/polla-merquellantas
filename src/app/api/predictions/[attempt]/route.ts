@@ -202,7 +202,7 @@ export async function POST(
     };
   } else if (body.kind === "knockout") {
     // Block the edit if this knockout round has already locked.
-    if (isKnockoutStageLocked(stageFromMatchId(body.matchId), now)) {
+    if (isKnockoutStageLocked(stageFromMatchId(body.matchId), now, user.nit)) {
       return NextResponse.json(
         { error: "Esta fase ya está cerrada." },
         { status: 423 },

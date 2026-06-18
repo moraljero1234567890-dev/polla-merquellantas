@@ -20,6 +20,19 @@ export const KNOCKOUT_STAGE_LOCK: Record<string, string> = {
   FINAL: "2026-07-18T16:00:00Z", // Final ~Jul 19
 };
 
+// Per-user knockout exceptions, keyed by canonical cédula/NIT (digits only,
+// no verification digit). A listed user may keep editing EVERY knockout round
+// until the given instant, ignoring the normal per-round schedule above.
+export const KNOCKOUT_USER_OVERRIDE: Record<string, string> = {
+  // Edits allowed through the end of June 30, 2026 Colombia time (UTC-5).
+  "800195354": "2026-07-01T04:59:59Z",
+};
+
+/** Canonical cédula/NIT: drop the check digit and keep digits only. */
+function canonicalNit(raw: string): string {
+  return String(raw ?? "").split("-")[0].replace(/\D/g, "");
+}
+
 export type KnockoutStage =
   | "ROUND_OF_32"
   | "ROUND_OF_16"
@@ -60,12 +73,23 @@ export function stageFromMatchId(matchId: string): KnockoutStage | null {
   return null;
 }
 
-/** A knockout round is locked ~24h before that round starts. */
+/**
+ * A knockout round is locked ~24h before that round starts. A user listed in
+ * KNOCKOUT_USER_OVERRIDE instead stays unlocked for every round until their
+ * single override deadline, then locks.
+ */
 export function isKnockoutStageLocked(
   stage: string | null | undefined,
   now: number = Date.now(),
+  userNit?: string | null,
 ): boolean {
   if (!stage) return false;
+  const override = userNit
+    ? KNOCKOUT_USER_OVERRIDE[canonicalNit(userNit)]
+    : undefined;
+  if (override) {
+    return now >= new Date(override).getTime();
+  }
   const iso = KNOCKOUT_STAGE_LOCK[stage];
   if (!iso) return false;
   return now >= new Date(iso).getTime();
