@@ -9,9 +9,6 @@ const MERQUE_LOGO = "/logos/merquellantas.png";
 
 type LeaderboardRow = {
   rank: number;
-  name: string;
-  attempt: number;
-  totalAttempts: number;
   points: number;
   isYou: boolean;
 };
@@ -107,8 +104,8 @@ export default function LeaderboardPage() {
               Ranking de la polla
             </h1>
             <p className="mt-3 max-w-xl text-white/70">
-              Posición de cada boleta según los puntos acumulados. Por
-              privacidad no se muestran cédulas ni correos de los participantes.
+              Posición de cada boleta según los puntos acumulados. La tabla es
+              anónima: solo verás tu propia posición resaltada.
             </p>
           </div>
         </section>
@@ -130,7 +127,7 @@ export default function LeaderboardPage() {
             <ul className="grid gap-2">
               {rows.map((row, i) => (
                 <li
-                  key={`${row.name}-${row.attempt}-${i}`}
+                  key={i}
                   className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 border p-4 ${
                     row.isYou
                       ? "border-[var(--brand)] bg-[var(--brand-soft)]"
@@ -141,19 +138,15 @@ export default function LeaderboardPage() {
                     {row.rank}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-base font-bold">
-                      {row.name}
-                      {row.isYou && (
-                        <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--brand)]">
-                          Tú
+                    <p className="text-base font-bold">
+                      {row.isYou ? (
+                        <span className="text-[var(--brand)]">Tu boleta</span>
+                      ) : (
+                        <span className="text-[var(--foreground-soft)]">
+                          Participante
                         </span>
                       )}
                     </p>
-                    {row.totalAttempts > 1 && (
-                      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">
-                        Boleta · Intento {row.attempt}
-                      </p>
-                    )}
                   </div>
                   <div className="flex items-baseline gap-1">
                     <span className="font-mono text-2xl font-black tabular-nums">

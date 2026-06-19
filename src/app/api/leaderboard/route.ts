@@ -10,11 +10,10 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Public (participant-facing) leaderboard. Returns only the position, display
- * name and points of each boleta — never a cédula/NIT or email, which are
- * sensitive. Gated to known users so the participant list isn't scrapable by
- * anonymous traffic; `isYou` lets the caller highlight their own rows without
- * exposing anyone else's identity.
+ * Public (participant-facing) leaderboard. Fully anonymous: returns only the
+ * position and points of each boleta — never a name, cédula/NIT or email.
+ * Gated to known users so it isn't scrapable by anonymous traffic; `isYou`
+ * lets the caller highlight their own rows without exposing anyone's identity.
  */
 export async function GET(request: NextRequest) {
   const email = (request.nextUrl.searchParams.get("email") ?? "")
@@ -54,9 +53,6 @@ export async function GET(request: NextRequest) {
       lastRank = rank;
       return {
         rank,
-        name: r.name,
-        attempt: r.attempt,
-        totalAttempts: r.totalAttempts,
         points,
         isYou: r.email === email,
       };
