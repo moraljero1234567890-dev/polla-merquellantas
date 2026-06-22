@@ -221,8 +221,10 @@ function splitTemplateArgs(body: string): Record<string, string> {
   return args;
 }
 
-function extractFootballBoxes(wikitext: string): Record<string, string>[] {
-  const out: Record<string, string>[] = [];
+function extractFootballBoxes(
+  wikitext: string,
+): { fields: Record<string, string>; pos: number }[] {
+  const out: { fields: Record<string, string>; pos: number }[] = [];
   const startRe = /\{\{#invoke:football box\|main\b/g;
   let m: RegExpExecArray | null;
   while ((m = startRe.exec(wikitext)) !== null) {
@@ -247,7 +249,71 @@ function extractFootballBoxes(wikitext: string): Record<string, string>[] {
     if (end < 0) continue;
     const body = wikitext.slice(m.index + 2, end - 2);
     const stripped = body.replace(/^#invoke:football box\|main\|?/i, "");
-    out.push(splitTemplateArgs(stripped));
+    out.push({ fields: splitTemplateArgs(stripped), pos: m.index });
+  }
+  return out;
+}
+
+/**
+ * Notable matches (e.g. the 1,000th World Cup match, Tunisia vs Japan) get
+ * their own Wikipedia article and are pulled into the group/stage page via
+ * Labeled Section Transclusion — `{{#lst:Page|Label}}` — instead of an inline
+ * football box. Resolve those by fetching the referenced page and lifting its
+ * football box, so the match isn't silently dropped (no score, no points).
+ */
+const LST_RE = /\{\{#(?:lst|lstx|section):\s*([^|}]+?)\s*\|[^}]*\}\}/g;
+
+async function fetchTranscludedBox(
+  page: string,
+): Promise<Record<string, string> | null> {
+  try {
+    const wt = await fetchWikitext(page);
+    const boxes = extractFootballBoxes(wt);
+    return boxes[0]?.fields ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return every match's football-box fields in document order, resolving any
+ * `{{#lst:...}}` transclusions to their dedicated match article. Order is
+ * preserved because group/stage parsing derives matchday and external id from
+ * each box's position.
+ */
+async function extractMatchBoxes(
+  wikitext: string,
+): Promise<Record<string, string>[]> {
+  const tokens: Array<
+    | { pos: number; kind: "inline"; fields: Record<string, string> }
+    | { pos: number; kind: "page"; page: string }
+  > = [];
+
+  for (const b of extractFootballBoxes(wikitext)) {
+    tokens.push({ pos: b.pos, kind: "inline", fields: b.fields });
+  }
+
+  // A match page is usually transcluded twice (the box and the line-ups);
+  // keep one entry per page, at its first occurrence.
+  const seen = new Map<string, number>();
+  let m: RegExpExecArray | null;
+  LST_RE.lastIndex = 0;
+  while ((m = LST_RE.exec(wikitext)) !== null) {
+    const page = m[1].trim();
+    if (page && !seen.has(page)) seen.set(page, m.index);
+  }
+  for (const [page, pos] of seen) tokens.push({ pos, kind: "page", page });
+
+  tokens.sort((a, b) => a.pos - b.pos);
+
+  const out: Record<string, string>[] = [];
+  for (const t of tokens) {
+    if (t.kind === "inline") {
+      out.push(t.fields);
+    } else {
+      const fields = await fetchTranscludedBox(t.page);
+      if (fields) out.push(fields);
+    }
   }
   return out;
 }
@@ -426,7 +492,7 @@ async function parseGroupPage(letter: string): Promise<MatchDoc[]> {
   const start = wt.indexOf("==Matches==");
   if (start < 0) return [];
   const sliced = wt.slice(start);
-  const boxes = extractFootballBoxes(sliced);
+  const boxes = await extractMatchBoxes(sliced);
   return boxes
     .map((fields, idx) => {
       const matchday = Math.floor(idx / 2) + 1;
@@ -456,7 +522,7 @@ async function parseKnockoutPage(): Promise<MatchDoc[]> {
     if (!cfg) continue;
     const end = sections[i + 1]?.start ?? wt.length;
     const segment = wt.slice(start, end);
-    const boxes = extractFootballBoxes(segment);
+    const boxes = await extractMatchBoxes(segment);
     boxes.forEach((fields, idx) => {
       const doc = toMatchDoc(fields, {
         stage: cfg.stage,
@@ -472,7 +538,7 @@ async function parseKnockoutPage(): Promise<MatchDoc[]> {
 async function parseFinalPage(): Promise<MatchDoc[]> {
   try {
     const wt = await fetchWikitext("2026_FIFA_World_Cup_final");
-    const boxes = extractFootballBoxes(wt);
+    const boxes = await extractMatchBoxes(wt);
     return boxes
       .map((fields, idx) =>
         toMatchDoc(fields, {
