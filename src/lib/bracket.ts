@@ -4,6 +4,7 @@ import type {
   MatchDoc,
   PredictionDoc,
 } from "./types";
+import { officialThirdAllocation } from "./third-place-allocation";
 
 export type StandingRow = {
   teamCode: string;
@@ -249,19 +250,43 @@ export function buildR32Seeds(
     }
   });
 
-  const assignment = assignThirdsToSlots(
-    thirdSlots.map((s) => s.allowed),
-    thirdGroups,
-  );
   // Map "templateIdx:side" -> the assigned third row.
   const thirdBySlotKey = new Map<string, StandingRow>();
-  if (assignment) {
-    thirdSlots.forEach((s, i) => {
-      const t = assignment[i];
-      if (t >= 0 && thirds[t]) {
-        thirdBySlotKey.set(`${s.templateIdx}:${s.side}`, thirds[t]);
-      }
+
+  // Prefer FIFA's official Annex C allocation: it is predetermined for each of
+  // the 495 possible sets of eight qualifying third-place groups. Several
+  // constraint-valid matchings exist for any given set, so only this lookup
+  // reproduces the real bracket (e.g. it puts Paraguay, not Bosnia, opposite
+  // the Group E winner). Fall back to a constraint-satisfying matching while
+  // the eight thirds aren't all known yet (a partially-filled prediction).
+  const official = officialThirdAllocation(thirdGroups);
+  if (official) {
+    const thirdByGroup = new Map(thirds.map((r) => [r.group, r]));
+    thirdSlots.forEach((s) => {
+      const tmpl = R32_TEMPLATE[s.templateIdx];
+      const winner =
+        tmpl.home.kind === "W"
+          ? tmpl.home
+          : tmpl.away.kind === "W"
+            ? tmpl.away
+            : null;
+      const thirdGroup = winner ? official.get(winner.group) : undefined;
+      const row = thirdGroup ? thirdByGroup.get(thirdGroup) : undefined;
+      if (row) thirdBySlotKey.set(`${s.templateIdx}:${s.side}`, row);
     });
+  } else {
+    const assignment = assignThirdsToSlots(
+      thirdSlots.map((s) => s.allowed),
+      thirdGroups,
+    );
+    if (assignment) {
+      thirdSlots.forEach((s, i) => {
+        const t = assignment[i];
+        if (t >= 0 && thirds[t]) {
+          thirdBySlotKey.set(`${s.templateIdx}:${s.side}`, thirds[t]);
+        }
+      });
+    }
   }
 
   const pick = (
