@@ -17,6 +17,7 @@ import {
   championFromFinal,
   computeGroupStandings,
   isGroupStageComplete,
+  realGroupStandings,
 } from "@/lib/bracket";
 import type {
   GroupScore,
@@ -61,17 +62,22 @@ async function recomputeKnockout(
 ): Promise<PredictionDoc> {
   const matches = await getAllMatches();
   const groupMatches = matches.filter((m) => m.stage === "GROUP_STAGE");
-  if (!isGroupStageComplete(groupMatches, prediction.groupScores)) {
+  // Once the group stage has actually finished, seed the knockout from the REAL
+  // results so every user edits the true round-of-32 draw (their predicted
+  // bracket may not match reality). Before results exist, fall back to the
+  // user's own predicted group standings.
+  const standings =
+    realGroupStandings(groupMatches) ??
+    (isGroupStageComplete(groupMatches, prediction.groupScores)
+      ? computeGroupStandings(groupMatches, prediction.groupScores)
+      : null);
+  if (!standings) {
     return {
       ...prediction,
       knockout: { r32: [], r16: [], qf: [], sf: [], third: null, final: null },
       champion: null,
     };
   }
-  const standings = computeGroupStandings(
-    groupMatches,
-    prediction.groupScores,
-  );
   const knockout = buildKnockoutFromGroup(standings, prediction.knockout);
   const champion = championFromFinal(knockout.final);
   return { ...prediction, knockout, champion };

@@ -874,6 +874,12 @@ export default function PredictPage() {
   const groupComplete =
     totalGroupMatches > 0 && filledCount === totalGroupMatches;
 
+  // The server seeds the bracket from the real results once the group stage is
+  // over, so the knockout opens for everyone — even users who never finished
+  // their group picks. Before that it only fills in once the user completes
+  // their groups, so a populated R32 is the right signal either way.
+  const knockoutOpen = (prediction?.knockout.r32.length ?? 0) > 0;
+
   const knockoutFilled = useMemo(() => {
     if (!prediction) return 0;
     const stages = [
@@ -1173,7 +1179,7 @@ export default function PredictPage() {
               <div>
                 <dt>Eliminatorias</dt>
                 <dd className="mt-1 text-2xl font-black tabular-nums text-white">
-                  {groupComplete ? `${knockoutFilled}/${totalKnockout}` : "—"}
+                  {knockoutOpen ? `${knockoutFilled}/${totalKnockout}` : "—"}
                 </dd>
               </div>
             </div>
@@ -1300,18 +1306,24 @@ export default function PredictPage() {
                   Eliminatorias
                 </p>
                 <h2 className="mt-2 text-2xl font-black uppercase md:text-3xl">
-                  {groupComplete
+                  {knockoutOpen
                     ? "Tu llave de eliminación"
                     : "Completa la fase de grupos para abrir la llave"}
                 </h2>
-                {!groupComplete && (
+                {!knockoutOpen && (
                   <p className="mt-2 text-sm text-[var(--foreground-soft)]">
                     Llevas {filledCount}/{totalGroupMatches} partidos predichos.
                   </p>
                 )}
+                {knockoutOpen && !groupComplete && (
+                  <p className="mt-2 text-sm text-[var(--foreground-soft)]">
+                    La llave ya muestra los cruces reales del Mundial. Ajusta tus
+                    predicciones de eliminación si quieres.
+                  </p>
+                )}
               </div>
 
-              {groupComplete && (
+              {knockoutOpen && (
                 <div className="mt-8 space-y-10">
                   <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)] md:hidden">
                     Desliza horizontalmente para ver toda la llave →

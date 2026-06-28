@@ -103,6 +103,29 @@ export function computeGroupStandings(
   return result;
 }
 
+/**
+ * Standings computed from the ACTUAL group results (the full-time scores
+ * already folded onto the stored fixtures from Wikipedia), rather than a
+ * user's predictions. Returns null until every group match has a real score,
+ * so callers can fall back to predicted standings before the group stage
+ * finishes. Once available it yields the real bracket — identical for every
+ * user — so knockout picks line up with the actual round-of-32 draw.
+ */
+export function realGroupStandings(
+  groupMatches: MatchDoc[],
+): Record<string, StandingRow[]> | null {
+  const scores: Record<string, GroupScore> = {};
+  for (const m of groupMatches) {
+    const ft = m.score?.fullTime;
+    if (!ft || typeof ft.home !== "number" || typeof ft.away !== "number") {
+      return null;
+    }
+    scores[m._id] = { home: ft.home, away: ft.away };
+  }
+  if (Object.keys(scores).length === 0) return null;
+  return computeGroupStandings(groupMatches, scores);
+}
+
 export function isGroupStageComplete(
   groupMatches: MatchDoc[],
   predictedScores: Record<string, GroupScore>,

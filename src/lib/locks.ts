@@ -20,6 +20,14 @@ export const KNOCKOUT_STAGE_LOCK: Record<string, string> = {
   FINAL: "2026-07-18T16:00:00Z", // Final ~Jul 19
 };
 
+// One-time "second chance" window. The group stage finished on June 28, 2026,
+// so the real round-of-32 bracket is now known. To let everyone realign their
+// knockout picks with the ACTUAL fixtures (their predicted bracket may not
+// match reality), every knockout round is reopened for ALL users until the end
+// of June 29, 2026 Colombia time (UTC-5). After this instant the normal
+// per-round schedule above resumes. Set to a past instant to disable.
+export const KNOCKOUT_GLOBAL_REOPEN_UNTIL = "2026-06-30T04:59:59Z";
+
 // Per-user knockout exceptions, keyed by canonical cédula/NIT (digits only,
 // no verification digit). A listed user may keep editing EVERY knockout round
 // until the given instant, ignoring the normal per-round schedule above.
@@ -84,6 +92,9 @@ export function isKnockoutStageLocked(
   userNit?: string | null,
 ): boolean {
   if (!stage) return false;
+  // Global second-chance window reopens every knockout round for everyone and
+  // takes precedence over the per-round schedule and per-user overrides.
+  if (now < new Date(KNOCKOUT_GLOBAL_REOPEN_UNTIL).getTime()) return false;
   const override = userNit
     ? KNOCKOUT_USER_OVERRIDE[canonicalNit(userNit)]
     : undefined;
