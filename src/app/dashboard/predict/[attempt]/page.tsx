@@ -12,7 +12,12 @@ import {
 import { createPortal } from "react-dom";
 import { formatDate } from "@/data/worldcup2026";
 import { computeGroupStandings, type StandingRow } from "@/lib/bracket";
-import { isGroupMatchLocked, isKnockoutStageLocked } from "@/lib/locks";
+import {
+  isGroupMatchLocked,
+  isKnockoutMatchLocked,
+  isKnockoutStageLocked,
+  knockoutIdentityKey,
+} from "@/lib/locks";
 import { staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
 import { displayTeam, normalizeTeam } from "@/lib/team-display";
@@ -867,6 +872,32 @@ export default function PredictPage() {
     [groupMatches, groupDrafts],
   );
 
+  // Kickoff time of each real knockout fixture, keyed by stage + teams, so an
+  // individual match can lock the moment it kicks off even while its round is
+  // reopened for editing.
+  const knockoutKickoffs = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of matches) {
+      if (m.stage === "GROUP_STAGE" || !m.utcDate) continue;
+      const key = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
+      if (key) map.set(key, m.utcDate);
+    }
+    return map;
+  }, [matches]);
+
+  const knockoutPickLocked = useCallback(
+    (pick: KnockoutPick): boolean => {
+      const key = knockoutIdentityKey(
+        pick.stage,
+        pick.homeTeamCode,
+        pick.awayTeamCode,
+      );
+      const kickoff = key ? knockoutKickoffs.get(key) ?? null : null;
+      return isKnockoutMatchLocked(pick.stage, kickoff, Date.now(), session?.nit);
+    },
+    [knockoutKickoffs, session?.nit],
+  );
+
   const filledCount = Object.values(groupDrafts).filter(
     (d) => typeof d.home === "number" && typeof d.away === "number",
   ).length;
@@ -1404,7 +1435,7 @@ export default function PredictPage() {
                               >
                                 <BracketCard
                                   pick={p}
-                                  disabled={stageLocked}
+                                  disabled={stageLocked || knockoutPickLocked(p)}
                                   size={col.stage === "FINAL" ? "lg" : "sm"}
                                   onChange={(h, a) =>
                                     queueKnockoutSave(
@@ -1442,11 +1473,7 @@ export default function PredictPage() {
                       <BracketCard
                         pick={prediction.knockout.third}
                         size="lg"
-                        disabled={isKnockoutStageLocked(
-                          "THIRD_PLACE",
-                          Date.now(),
-                          session?.nit,
-                        )}
+                        disabled={knockoutPickLocked(prediction.knockout.third)}
                         onChange={(h, a) =>
                           queueKnockoutSave(
                             prediction.knockout.third!.matchId,

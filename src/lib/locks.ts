@@ -70,6 +70,40 @@ export function isGroupMatchLocked(
   return false;
 }
 
+/** Identity key for a knockout match: stage + the unordered team-code pair.
+ * Lets a synthetic pick (R32-1, …) be matched to the real fixture that carries
+ * the kickoff time. Returns null while either team is still undecided. */
+export function knockoutIdentityKey(
+  stage: string | null | undefined,
+  codeA: string | null | undefined,
+  codeB: string | null | undefined,
+): string | null {
+  const a = (codeA ?? "").trim().toLowerCase();
+  const b = (codeB ?? "").trim().toLowerCase();
+  if (!stage || !a || !b) return null;
+  return `${stage}|${[a, b].sort().join("~")}`;
+}
+
+/**
+ * A specific knockout match is locked if its round is locked OR it has already
+ * kicked off. The kickoff check matters during the global reopen window: the
+ * round is otherwise editable, but a match that has already started can never
+ * be changed (e.g. an early round-of-32 game that was played before the rest).
+ */
+export function isKnockoutMatchLocked(
+  stage: string | null | undefined,
+  kickoffIso: string | null | undefined,
+  now: number = Date.now(),
+  userNit?: string | null,
+): boolean {
+  if (isKnockoutStageLocked(stage, now, userNit)) return true;
+  if (kickoffIso) {
+    const k = new Date(kickoffIso).getTime();
+    if (Number.isFinite(k) && now >= k) return true;
+  }
+  return false;
+}
+
 /** Map a synthetic knockout matchId (e.g. "R32-1") to its stage. */
 export function stageFromMatchId(matchId: string): KnockoutStage | null {
   if (matchId.startsWith("R32")) return "ROUND_OF_32";

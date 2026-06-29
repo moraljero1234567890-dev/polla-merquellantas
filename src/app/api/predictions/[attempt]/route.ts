@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { emptyAttemptScore, scorePredictions } from "@/lib/scoring";
 import {
   isGroupMatchLocked,
-  isKnockoutStageLocked,
+  isKnockoutMatchLocked,
+  knockoutIdentityKey,
   stageFromMatchId,
 } from "@/lib/locks";
 import {
@@ -81,6 +82,37 @@ async function recomputeKnockout(
   const knockout = buildKnockoutFromGroup(standings, prediction.knockout);
   const champion = championFromFinal(knockout.final);
   return { ...prediction, knockout, champion };
+}
+
+function findKnockoutPick(
+  knockout: PredictionDoc["knockout"],
+  matchId: string,
+): KnockoutPick | null {
+  for (const arr of [knockout.r32, knockout.r16, knockout.qf, knockout.sf]) {
+    const found = arr.find((p) => p.matchId === matchId);
+    if (found) return found;
+  }
+  if (knockout.third?.matchId === matchId) return knockout.third;
+  if (knockout.final?.matchId === matchId) return knockout.final;
+  return null;
+}
+
+/** Kickoff time of the real fixture matching a knockout pick's teams, if any. */
+function knockoutKickoff(
+  matches: Awaited<ReturnType<typeof getAllMatches>>,
+  stage: string | null,
+  homeCode: string,
+  awayCode: string,
+): string | null {
+  const key = knockoutIdentityKey(stage, homeCode, awayCode);
+  if (!key) return null;
+  for (const m of matches) {
+    if (m.stage === "GROUP_STAGE") continue;
+    if (knockoutIdentityKey(m.stage, m.home.code, m.away.code) === key) {
+      return m.utcDate ?? null;
+    }
+  }
+  return null;
 }
 
 export async function GET(
@@ -207,10 +239,21 @@ export async function POST(
       groupScores: { ...prediction.groupScores, [body.matchId]: next },
     };
   } else if (body.kind === "knockout") {
-    // Block the edit if this knockout round has already locked.
-    if (isKnockoutStageLocked(stageFromMatchId(body.matchId), now, user.nit)) {
+    const stage = stageFromMatchId(body.matchId);
+    // Reseed to the real bracket first so this slot's teams (and therefore its
+    // kickoff time) reflect the actual draw, then block the edit if the round
+    // is locked OR this specific match has already kicked off. The latter keeps
+    // an already-played game (e.g. an early round-of-32 match) frozen even
+    // while the rest of the round stays open during the reopen window.
+    prediction = await recomputeKnockout(prediction);
+    const pick = findKnockoutPick(prediction.knockout, body.matchId);
+    const matches = await getAllMatches();
+    const kickoff = pick
+      ? knockoutKickoff(matches, stage, pick.homeTeamCode, pick.awayTeamCode)
+      : null;
+    if (isKnockoutMatchLocked(stage, kickoff, now, user.nit)) {
       return NextResponse.json(
-        { error: "Esta fase ya está cerrada." },
+        { error: "Este partido ya está cerrado." },
         { status: 423 },
       );
     }
