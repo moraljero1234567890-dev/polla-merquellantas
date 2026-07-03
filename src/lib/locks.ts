@@ -20,13 +20,14 @@ export const KNOCKOUT_STAGE_LOCK: Record<string, string> = {
   FINAL: "2026-07-18T16:00:00Z", // Final ~Jul 19
 };
 
-// One-time "second chance" window. The group stage finished on June 28, 2026,
-// so the real round-of-32 bracket is now known. To let everyone realign their
-// knockout picks with the ACTUAL fixtures (their predicted bracket may not
-// match reality), every knockout round is reopened for ALL users until the end
-// of June 29, 2026 Colombia time (UTC-5). After this instant the normal
-// per-round schedule above resumes. Set to a past instant to disable.
-export const KNOCKOUT_GLOBAL_REOPEN_UNTIL = "2026-06-30T04:59:59Z";
+// Second editing window for the knockout phase. The round of 32 finished on
+// July 3, 2026, so the real round-of-16 bracket is now fully known. Every
+// knockout round (R16 onwards) is reopened for ALL users until July 4, 2026
+// at 12:00 noon Colombia time (UTC-5 = 17:00 UTC). After that instant the
+// normal per-round lock schedule above resumes. R32 matches remain individually
+// locked by their kickoff times even during this window. Set to a past instant
+// to disable.
+export const KNOCKOUT_GLOBAL_REOPEN_UNTIL = "2026-07-04T17:00:00Z";
 
 // Per-user knockout exceptions, keyed by canonical cédula/NIT (digits only,
 // no verification digit). A listed user may keep editing EVERY knockout round

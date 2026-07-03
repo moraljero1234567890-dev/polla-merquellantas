@@ -17,6 +17,7 @@ import {
   isKnockoutMatchLocked,
   isKnockoutStageLocked,
   knockoutIdentityKey,
+  KNOCKOUT_GLOBAL_REOPEN_UNTIL,
 } from "@/lib/locks";
 import { staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
@@ -1351,6 +1352,23 @@ export default function PredictPage() {
                     La llave ya muestra los cruces reales del Mundial. Ajusta tus
                     predicciones de eliminación si quieres.
                   </p>
+                )}
+                {knockoutOpen && Date.now() < new Date(KNOCKOUT_GLOBAL_REOPEN_UNTIL).getTime() && (
+                  <div className="mt-6 border-l-4 border-amber-500 bg-amber-50 p-4">
+                    <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-amber-800">
+                      Ventana de predicciones abiertas
+                    </p>
+                    <p className="mt-1 text-sm text-amber-900">
+                      La fase eliminatoria (octavos en adelante) está abierta para editar.
+                      Tienes hasta el <strong>viernes 4 de julio a las 12:00 m. (hora Colombia)</strong> para
+                      ajustar tus pronósticos de octavos, cuartos, semis y final.
+                    </p>
+                    <p className="mt-2 text-xs text-amber-800">
+                      Puntuación eliminatoria: <strong>40 pts</strong> por acertar el resultado ·
+                      <strong> 60 pts</strong> por marcador exacto ·
+                      <strong> 25 pts</strong> por diferencia de gol · máx <strong>125 pts/partido</strong>
+                    </p>
+                  </div>
                 )}
               </div>
 

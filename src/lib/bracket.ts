@@ -5,6 +5,7 @@ import type {
   PredictionDoc,
 } from "./types";
 import { officialThirdAllocation } from "./third-place-allocation";
+import { knockoutIdentityKey } from "./locks";
 
 export type StandingRow = {
   teamCode: string;
@@ -379,15 +380,66 @@ function loserOf(pick: KnockoutPick): R32SeedTeam {
   return null;
 }
 
+function realWinnerFromMatch(m: MatchDoc): R32SeedTeam {
+  if (m.status !== "FINISHED") return null;
+  const ft = m.score?.fullTime;
+  if (!ft) return null;
+  if (ft.home > ft.away) return { code: m.home.code, name: m.home.name };
+  if (ft.away > ft.home) return { code: m.away.code, name: m.away.name };
+  const pen = m.score?.penalties;
+  if (pen) {
+    if (pen.home > pen.away) return { code: m.home.code, name: m.home.name };
+    if (pen.away > pen.home) return { code: m.away.code, name: m.away.name };
+  }
+  return null;
+}
+
 export function buildKnockoutFromGroup(
   standings: Record<string, StandingRow[]>,
   existing?: PredictionDoc["knockout"],
+  realKnockoutMatches?: MatchDoc[],
 ): PredictionDoc["knockout"] {
+  // Build a lookup from identity key → real winner for finished knockout matches.
+  // When a real result exists we use it for bracket propagation instead of the
+  // user's predicted score, so every user sees the correct bracket automatically
+  // (e.g. after all R32 games are done, R16 teams are pre-filled from results).
+  const realWinnerMap = new Map<string, R32SeedTeam>();
+  if (realKnockoutMatches) {
+    for (const m of realKnockoutMatches) {
+      const key = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
+      if (key) realWinnerMap.set(key, realWinnerFromMatch(m));
+    }
+  }
+
+  function effectiveWinner(pick: KnockoutPick): R32SeedTeam {
+    const key = knockoutIdentityKey(pick.stage, pick.homeTeamCode, pick.awayTeamCode);
+    if (key && realWinnerMap.has(key)) return realWinnerMap.get(key) ?? null;
+    return winnerOf(pick);
+  }
+
   const r32Seeds = buildR32Seeds(standings);
   const r32: KnockoutPick[] = r32Seeds.map((seed, i) => {
     const id = `R32-${i + 1}`;
     const prev = existing?.r32?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "ROUND_OF_32", seed.home, seed.away);
+
+    // If the real match finished, bake its score into the pick so downstream
+    // rounds (R16) can derive the winner without needing a user-entered score.
+    const realKey = knockoutIdentityKey("ROUND_OF_32", fresh.homeTeamCode, fresh.awayTeamCode);
+    const realMatch = realKey
+      ? realKnockoutMatches?.find((m) => {
+          const k = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
+          return k === realKey;
+        })
+      : undefined;
+    if (realMatch?.status === "FINISHED" && realMatch.score?.fullTime) {
+      const ft = realMatch.score.fullTime;
+      const pen = realMatch.score.penalties;
+      let penWinner: "home" | "away" | null = null;
+      if (pen) penWinner = pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null;
+      return { ...fresh, home: ft.home, away: ft.away, penaltyWinner: penWinner };
+    }
+
     if (
       prev &&
       prev.homeTeamCode === fresh.homeTeamCode &&
@@ -401,8 +453,8 @@ export function buildKnockoutFromGroup(
   const r16: KnockoutPick[] = [];
   for (let i = 0; i < 8; i++) {
     const [a, b] = R16_FEED[i];
-    const winA = winnerOf(r32[a]);
-    const winB = winnerOf(r32[b]);
+    const winA = effectiveWinner(r32[a]);
+    const winB = effectiveWinner(r32[b]);
     const id = `R16-${i + 1}`;
     const prev = existing?.r16?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "ROUND_OF_16", winA, winB);
@@ -420,8 +472,8 @@ export function buildKnockoutFromGroup(
   const qf: KnockoutPick[] = [];
   for (let i = 0; i < 4; i++) {
     const [a, b] = QF_FEED[i];
-    const winA = winnerOf(r16[a]);
-    const winB = winnerOf(r16[b]);
+    const winA = effectiveWinner(r16[a]);
+    const winB = effectiveWinner(r16[b]);
     const id = `QF-${i + 1}`;
     const prev = existing?.qf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "QUARTER_FINALS", winA, winB);
@@ -439,8 +491,8 @@ export function buildKnockoutFromGroup(
   const sf: KnockoutPick[] = [];
   for (let i = 0; i < 2; i++) {
     const [a, b] = SF_FEED[i];
-    const winA = winnerOf(qf[a]);
-    const winB = winnerOf(qf[b]);
+    const winA = effectiveWinner(qf[a]);
+    const winB = effectiveWinner(qf[b]);
     const id = `SF-${i + 1}`;
     const prev = existing?.sf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "SEMI_FINALS", winA, winB);
@@ -466,8 +518,8 @@ export function buildKnockoutFromGroup(
       ? { ...thirdFresh, home: thirdPrev.home, away: thirdPrev.away, penaltyWinner: thirdPrev.penaltyWinner }
       : thirdFresh;
 
-  const sfWinA = winnerOf(sf[0]);
-  const sfWinB = winnerOf(sf[1]);
+  const sfWinA = effectiveWinner(sf[0]);
+  const sfWinB = effectiveWinner(sf[1]);
   const finalFresh = emptyPick("FINAL-1", "FINAL", sfWinA, sfWinB);
   const finalPrev = existing?.final;
   const final: KnockoutPick =

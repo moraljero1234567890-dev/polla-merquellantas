@@ -63,6 +63,7 @@ async function recomputeKnockout(
 ): Promise<PredictionDoc> {
   const matches = await getAllMatches();
   const groupMatches = matches.filter((m) => m.stage === "GROUP_STAGE");
+  const knockoutMatches = matches.filter((m) => m.stage !== "GROUP_STAGE");
   // Once the group stage has actually finished, seed the knockout from the REAL
   // results so every user edits the true round-of-32 draw (their predicted
   // bracket may not match reality). Before results exist, fall back to the
@@ -79,7 +80,9 @@ async function recomputeKnockout(
       champion: null,
     };
   }
-  const knockout = buildKnockoutFromGroup(standings, prediction.knockout);
+  // Pass real knockout match results so finished rounds (e.g. all R32 games)
+  // automatically propagate into the next round bracket for every user.
+  const knockout = buildKnockoutFromGroup(standings, prediction.knockout, knockoutMatches);
   const champion = championFromFinal(knockout.final);
   return { ...prediction, knockout, champion };
 }
