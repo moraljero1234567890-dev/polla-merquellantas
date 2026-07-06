@@ -104,8 +104,17 @@ export default function ResultsPage() {
     };
   }, [session, attemptNum]);
 
+  // Only show group matches that have actually been played (or are in progress).
+  // Showing SCHEDULED future matches would make it look like users predicted
+  // games that "never happened."
   const groupMatches = useMemo(
-    () => matches.filter((m) => m.stage === "GROUP_STAGE" && m.group),
+    () =>
+      matches.filter(
+        (m) =>
+          m.stage === "GROUP_STAGE" &&
+          m.group &&
+          (m.status === "FINISHED" || m.status === "IN_PLAY"),
+      ),
     [matches],
   );
 
@@ -421,7 +430,7 @@ export default function ResultsPage() {
                         )}
                       </h3>
                       <ul className="grid gap-3 md:grid-cols-2">
-                        {picks.map((p) => {
+                        {picks.filter((p) => p.homeTeamCode && p.awayTeamCode).map((p) => {
                           const h = displayTeam(p.homeTeamCode, p.homeTeamName);
                           const a = displayTeam(p.awayTeamCode, p.awayTeamName);
                           const isHit =

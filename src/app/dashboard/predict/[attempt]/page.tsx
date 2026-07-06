@@ -17,9 +17,8 @@ import {
   isKnockoutMatchLocked,
   isKnockoutStageLocked,
   knockoutIdentityKey,
-  KNOCKOUT_GLOBAL_REOPEN_UNTIL,
 } from "@/lib/locks";
-import { staticFallback, type ApiMatch } from "@/lib/matches";
+import { colombiaKickoff, staticFallback, type ApiMatch } from "@/lib/matches";
 import { clearSession, readSession, type Session } from "@/lib/session";
 import { displayTeam, normalizeTeam } from "@/lib/team-display";
 import type { KnockoutPick, PredictionDoc } from "@/lib/types";
@@ -375,6 +374,10 @@ function GroupMatchRow({
 }) {
   const home = normalizeTeam(match.home);
   const away = normalizeTeam(match.away);
+  // Show kickoff in Colombia time (UTC-5); fall back to stored UTC date/time
+  const kickoff = match.utcDate
+    ? colombiaKickoff(match.utcDate)
+    : { date: formatDate(match.date), time: match.time };
   return (
     <li
       className={`grid grid-cols-[1fr_auto_1fr] items-center gap-3 border p-4 md:grid-cols-[120px_1fr_auto_1fr_auto] ${
@@ -382,8 +385,8 @@ function GroupMatchRow({
       }`}
     >
       <div className="hidden font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)] md:block">
-        <div>{formatDate(match.date)}</div>
-        <div className="text-[var(--foreground)]">{match.time}</div>
+        <div>{kickoff.date}</div>
+        <div className="text-[var(--foreground)]">{kickoff.time}</div>
         {locked && (
           <div className="mt-1 font-bold text-[var(--brand)]">Cerrado</div>
         )}
@@ -429,7 +432,7 @@ function GroupMatchRow({
       </div>
       <div className="col-span-3 border-t border-dashed border-[var(--line)] pt-2 text-xs text-[var(--foreground-soft)] md:col-span-1 md:border-0 md:pt-0 md:text-right">
         <div className="md:hidden">
-          {formatDate(match.date)} · {match.time}
+          {kickoff.date} · {kickoff.time}
           {locked && (
             <span className="ml-2 font-bold text-[var(--brand)]">· Cerrado</span>
           )}
@@ -450,6 +453,7 @@ function BracketCard({
   onPickPenalty,
   size = "sm",
   disabled = false,
+  kickoffLabel,
 }: {
   pick: KnockoutPick;
   onChange: (home: number | null, away: number | null) => void;
@@ -457,6 +461,7 @@ function BracketCard({
   onPickPenalty: (winner: "home" | "away") => void;
   size?: "sm" | "lg";
   disabled?: boolean;
+  kickoffLabel?: string;
 }) {
   const isTie =
     pick.home != null && pick.away != null && pick.home === pick.away;
@@ -522,6 +527,11 @@ function BracketCard({
         disabled ? "bg-[var(--surface)]" : "bg-white"
       }`}
     >
+      {kickoffLabel && (
+        <div className="border-b border-dashed border-[var(--line)] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">
+          {kickoffLabel}
+        </div>
+      )}
       {row("home", home, pick.home, (v) => onChange(v, pick.away))}
       <div className="h-px bg-[var(--line)]" />
       {row("away", away, pick.away, (v) => onChange(pick.home, v))}
@@ -882,6 +892,19 @@ export default function PredictPage() {
       if (m.stage === "GROUP_STAGE" || !m.utcDate) continue;
       const key = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
       if (key) map.set(key, m.utcDate);
+    }
+    return map;
+  }, [matches]);
+
+  // Colombia-time kickoff label for each real knockout fixture (shown on bracket cards).
+  const knockoutKickoffLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of matches) {
+      if (m.stage === "GROUP_STAGE" || !m.utcDate) continue;
+      const key = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
+      if (!key) continue;
+      const { date, time } = colombiaKickoff(m.utcDate);
+      map.set(key, `${date} · ${time}`);
     }
     return map;
   }, [matches]);
@@ -1353,23 +1376,6 @@ export default function PredictPage() {
                     predicciones de eliminación si quieres.
                   </p>
                 )}
-                {knockoutOpen && Date.now() < new Date(KNOCKOUT_GLOBAL_REOPEN_UNTIL).getTime() && (
-                  <div className="mt-6 border-l-4 border-amber-500 bg-amber-50 p-4">
-                    <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-amber-800">
-                      Ventana de predicciones abiertas
-                    </p>
-                    <p className="mt-1 text-sm text-amber-900">
-                      La fase eliminatoria (octavos en adelante) está abierta para editar.
-                      Tienes hasta el <strong>viernes 4 de julio a las 12:00 m. (hora Colombia)</strong> para
-                      ajustar tus pronósticos de octavos, cuartos, semis y final.
-                    </p>
-                    <p className="mt-2 text-xs text-amber-800">
-                      Puntuación eliminatoria: <strong>40 pts</strong> por acertar el resultado ·
-                      <strong> 60 pts</strong> por marcador exacto ·
-                      <strong> 25 pts</strong> por diferencia de gol · máx <strong>125 pts/partido</strong>
-                    </p>
-                  </div>
-                )}
               </div>
 
               {knockoutOpen && (
@@ -1455,6 +1461,10 @@ export default function PredictPage() {
                                   pick={p}
                                   disabled={stageLocked || knockoutPickLocked(p)}
                                   size={col.stage === "FINAL" ? "lg" : "sm"}
+                                  kickoffLabel={(() => {
+                                    const key = knockoutIdentityKey(p.stage, p.homeTeamCode, p.awayTeamCode);
+                                    return key ? knockoutKickoffLabels.get(key) : undefined;
+                                  })()}
                                   onChange={(h, a) =>
                                     queueKnockoutSave(
                                       p.matchId,
@@ -1492,6 +1502,11 @@ export default function PredictPage() {
                         pick={prediction.knockout.third}
                         size="lg"
                         disabled={knockoutPickLocked(prediction.knockout.third)}
+                        kickoffLabel={(() => {
+                          const t = prediction.knockout.third!;
+                          const key = knockoutIdentityKey(t.stage, t.homeTeamCode, t.awayTeamCode);
+                          return key ? knockoutKickoffLabels.get(key) : undefined;
+                        })()}
                         onChange={(h, a) =>
                           queueKnockoutSave(
                             prediction.knockout.third!.matchId,

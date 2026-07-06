@@ -1,5 +1,19 @@
 import { matches as staticMatches, flagSrc } from "@/data/worldcup2026";
 
+/**
+ * Convert a UTC ISO timestamp to Colombia date/time.
+ * Colombia is always UTC-5 (no DST).
+ */
+export function colombiaKickoff(utcIso: string): { date: string; time: string } {
+  const ms = new Date(utcIso).getTime() - 5 * 60 * 60 * 1000;
+  const d = new Date(ms);
+  const months = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+  return {
+    date: `${d.getUTCDate()} ${months[d.getUTCMonth()]}`,
+    time: `${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`,
+  };
+}
+
 export type ApiMatch = {
   _id: string;
   utcDate?: string;
