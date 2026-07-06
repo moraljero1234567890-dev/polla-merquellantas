@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import {
   buildKnockoutFromGroup,
+  buildKnockoutFromRealFixtures,
   championFromFinal,
   computeGroupStandings,
   isGroupStageComplete,
@@ -74,6 +75,15 @@ async function recomputeKnockout(
       ? computeGroupStandings(groupMatches, prediction.groupScores)
       : null);
   if (!standings) {
+    // Group standings unavailable (scores missing from DB). Try building
+    // the bracket directly from whatever real knockout fixtures are stored —
+    // this covers the case where R32 and R16 fixtures are in the DB even
+    // though some group match scores weren't scraped from Wikipedia.
+    const directKnockout = buildKnockoutFromRealFixtures(knockoutMatches, prediction.knockout);
+    if (directKnockout) {
+      const champion = championFromFinal(directKnockout.final);
+      return { ...prediction, knockout: directKnockout, champion };
+    }
     return {
       ...prediction,
       knockout: { r32: [], r16: [], qf: [], sf: [], third: null, final: null },

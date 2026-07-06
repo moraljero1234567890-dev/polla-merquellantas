@@ -107,23 +107,47 @@ export function computeGroupStandings(
 /**
  * Standings computed from the ACTUAL group results (the full-time scores
  * already folded onto the stored fixtures from Wikipedia), rather than a
- * user's predictions. Returns null until every group match has a real score,
- * so callers can fall back to predicted standings before the group stage
- * finishes. Once available it yields the real bracket — identical for every
- * user — so knockout picks line up with the actual round-of-32 draw.
+ * user's predictions.
+ *
+ * Strict mode: if ALL 48 group matches have scores, returns complete standings.
+ *
+ * Lenient mode: if some scores are missing from the DB but every group match
+ * has already kicked off (kickoff UTC is in the past), the group stage is
+ * definitively over and we compute standings from whatever scores we do have.
+ * This prevents a Wikipedia parsing gap from permanently blocking the knockout
+ * bracket.
+ *
+ * Returns null while the group stage is genuinely still in progress so callers
+ * can fall back to predicted standings before real results exist.
  */
 export function realGroupStandings(
   groupMatches: MatchDoc[],
+  now: number = Date.now(),
 ): Record<string, StandingRow[]> | null {
   const scores: Record<string, GroupScore> = {};
+
   for (const m of groupMatches) {
     const ft = m.score?.fullTime;
-    if (!ft || typeof ft.home !== "number" || typeof ft.away !== "number") {
-      return null;
+    if (ft && typeof ft.home === "number" && typeof ft.away === "number") {
+      scores[m._id] = { home: ft.home, away: ft.away };
     }
-    scores[m._id] = { home: ft.home, away: ft.away };
   }
+
   if (Object.keys(scores).length === 0) return null;
+
+  // All scores present → complete standings, return immediately.
+  if (Object.keys(scores).length === groupMatches.length) {
+    return computeGroupStandings(groupMatches, scores);
+  }
+
+  // Some scores are missing. Only use partial data if the group stage is
+  // definitively over: every match either has a score already, or has a known
+  // kickoff time that is in the past (it was played but score wasn't captured).
+  const groupStageOver = groupMatches.every(
+    (m) => scores[m._id] || (m.utcDate && new Date(m.utcDate).getTime() <= now),
+  );
+
+  if (!groupStageOver) return null;
   return computeGroupStandings(groupMatches, scores);
 }
 
@@ -392,6 +416,156 @@ function realWinnerFromMatch(m: MatchDoc): R32SeedTeam {
     if (pen.away > pen.home) return { code: m.away.code, name: m.away.name };
   }
   return null;
+}
+
+/**
+ * Map a Wikipedia externalId (e.g. "ROUND_OF_32-3") to the synthetic matchId
+ * used inside PredictionDoc (e.g. "R32-3"). Returns null for unknown formats.
+ */
+function externalIdToMatchId(externalId: string): string | null {
+  const prefixMap: Record<string, string> = {
+    ROUND_OF_32: "R32",
+    ROUND_OF_16: "R16",
+    QUARTER_FINALS: "QF",
+    SEMI_FINALS: "SF",
+    THIRD_PLACE: "THIRD",
+    FINAL: "FINAL",
+  };
+  const m = /^([A-Z_]+)-(\d+)$/.exec(externalId);
+  if (!m) return null;
+  const prefix = prefixMap[m[1]];
+  if (!prefix) return null;
+  return `${prefix}-${m[2]}`;
+}
+
+/**
+ * Build a knockout bracket directly from real fixtures already stored in the
+ * DB, without needing group standings. Used when some group match scores are
+ * missing (e.g. Wikipedia parsing gap) but the real R32/R16 bracket is already
+ * determined and those fixtures are in the DB.
+ *
+ * Returns null if there are no real knockout fixtures to work from.
+ */
+export function buildKnockoutFromRealFixtures(
+  realKnockoutMatches: MatchDoc[],
+  existing?: PredictionDoc["knockout"],
+): PredictionDoc["knockout"] | null {
+  // Index real fixtures by synthetic matchId (via externalId).
+  const byId = new Map<string, MatchDoc>();
+  for (const m of realKnockoutMatches) {
+    if (!m.externalId) continue;
+    const id = externalIdToMatchId(m.externalId);
+    if (id) byId.set(id, m);
+  }
+  if (byId.size === 0) return null;
+
+  /** Extract the winner of a real finished fixture. */
+  function realWinner(m: MatchDoc): R32SeedTeam {
+    return realWinnerFromMatch(m);
+  }
+
+  /** Return winner of a pick — from a real match result if available,
+   *  otherwise from the user's entered score. */
+  function pickWinner(pick: KnockoutPick): R32SeedTeam {
+    const real = byId.get(pick.matchId);
+    if (real) {
+      const w = realWinner(real);
+      if (w) return w;
+    }
+    if (pick.home == null || pick.away == null) return null;
+    if (pick.home > pick.away) return { code: pick.homeTeamCode, name: pick.homeTeamName };
+    if (pick.away > pick.home) return { code: pick.awayTeamCode, name: pick.awayTeamName };
+    if (pick.penaltyWinner === "home") return { code: pick.homeTeamCode, name: pick.homeTeamName };
+    if (pick.penaltyWinner === "away") return { code: pick.awayTeamCode, name: pick.awayTeamName };
+    return null;
+  }
+
+  /** Build a KnockoutPick from a real fixture, preserving the user's score if
+   *  the teams match and the match hasn't been played yet. */
+  function makePick(
+    matchId: string,
+    stage: KnockoutPick["stage"],
+    home: R32SeedTeam,
+    away: R32SeedTeam,
+    prevArr: KnockoutPick[] | undefined,
+  ): KnockoutPick {
+    const real = byId.get(matchId);
+    // Prefer real teams from the stored fixture if available.
+    const h = (real?.home.code ? { code: real.home.code, name: real.home.name } : home);
+    const a = (real?.away.code ? { code: real.away.code, name: real.away.name } : away);
+    const fresh = emptyPick(matchId, stage, h, a);
+
+    // If the match is already finished, use the real score.
+    if (real?.status === "FINISHED" && real.score?.fullTime) {
+      const ft = real.score.fullTime;
+      const pen = real.score.penalties;
+      let penWinner: "home" | "away" | null = null;
+      if (pen) penWinner = pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null;
+      return { ...fresh, home: ft.home, away: ft.away, penaltyWinner: penWinner };
+    }
+
+    // Preserve user's pick if teams match.
+    const prev = prevArr?.find((p) => p.matchId === matchId);
+    if (prev && prev.homeTeamCode === fresh.homeTeamCode && prev.awayTeamCode === fresh.awayTeamCode) {
+      return { ...fresh, home: prev.home, away: prev.away, penaltyWinner: prev.penaltyWinner };
+    }
+    return fresh;
+  }
+
+  const r32: KnockoutPick[] = [];
+  for (let i = 1; i <= 16; i++) {
+    const id = `R32-${i}`;
+    r32.push(makePick(id, "ROUND_OF_32", null, null, existing?.r32));
+  }
+
+  const r16: KnockoutPick[] = [];
+  for (let i = 0; i < 8; i++) {
+    const id = `R16-${i + 1}`;
+    const [a, b] = R16_FEED[i];
+    const winA = pickWinner(r32[a]);
+    const winB = pickWinner(r32[b]);
+    r16.push(makePick(id, "ROUND_OF_16", winA, winB, existing?.r16));
+  }
+
+  const qf: KnockoutPick[] = [];
+  for (let i = 0; i < 4; i++) {
+    const id = `QF-${i + 1}`;
+    const [a, b] = QF_FEED[i];
+    const winA = pickWinner(r16[a]);
+    const winB = pickWinner(r16[b]);
+    qf.push(makePick(id, "QUARTER_FINALS", winA, winB, existing?.qf));
+  }
+
+  const sf: KnockoutPick[] = [];
+  for (let i = 0; i < 2; i++) {
+    const id = `SF-${i + 1}`;
+    const [a, b] = SF_FEED[i];
+    const winA = pickWinner(qf[a]);
+    const winB = pickWinner(qf[b]);
+    sf.push(makePick(id, "SEMI_FINALS", winA, winB, existing?.sf));
+  }
+
+  const sfLoserA = (() => {
+    const p = sf[0]; if (!p) return null;
+    const w = pickWinner(p); if (!w) return null;
+    return w.code === p.homeTeamCode
+      ? { code: p.awayTeamCode, name: p.awayTeamName }
+      : { code: p.homeTeamCode, name: p.homeTeamName };
+  })();
+  const sfLoserB = (() => {
+    const p = sf[1]; if (!p) return null;
+    const w = pickWinner(p); if (!w) return null;
+    return w.code === p.homeTeamCode
+      ? { code: p.awayTeamCode, name: p.awayTeamName }
+      : { code: p.homeTeamCode, name: p.homeTeamName };
+  })();
+  const third = makePick("THIRD-1", "THIRD_PLACE", sfLoserA, sfLoserB, existing?.third ? [existing.third] : undefined);
+
+  const sfWinA = pickWinner(sf[0]);
+  const sfWinB = pickWinner(sf[1]);
+  const final = makePick("FINAL-1", "FINAL", sfWinA, sfWinB, existing?.final ? [existing.final] : undefined);
+
+  return { r32, r16, qf, sf, third, final };
 }
 
 export function buildKnockoutFromGroup(
