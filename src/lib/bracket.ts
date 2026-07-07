@@ -141,11 +141,14 @@ export function realGroupStandings(
   }
 
   // Some scores are missing. Only use partial data if the group stage is
-  // definitively over: every match either has a score already, or has a known
-  // kickoff time that is in the past (it was played but score wasn't captured).
-  const groupStageOver = groupMatches.every(
-    (m) => scores[m._id] || (m.utcDate && new Date(m.utcDate).getTime() <= now),
-  );
+  // definitively over. Hard cutoff: the 2026 group stage ended 2026-06-28.
+  // Also accept if every match either has a score or a past kickoff time.
+  const GROUP_STAGE_ENDED = new Date("2026-06-29T00:00:00Z").getTime();
+  const groupStageOver =
+    now >= GROUP_STAGE_ENDED ||
+    groupMatches.every(
+      (m) => scores[m._id] || (m.utcDate && new Date(m.utcDate).getTime() <= now),
+    );
 
   if (!groupStageOver) return null;
   return computeGroupStandings(groupMatches, scores);
@@ -450,11 +453,14 @@ export function buildKnockoutFromRealFixtures(
   realKnockoutMatches: MatchDoc[],
   existing?: PredictionDoc["knockout"],
 ): PredictionDoc["knockout"] | null {
-  // Index real fixtures by synthetic matchId (via externalId).
+  // Index real fixtures by synthetic matchId.
+  // Try externalId first; fall back to parsing the _id (Wikipedia-inserted
+  // docs use "_id: wiki-ROUND_OF_32-N" even when externalId isn't set).
   const byId = new Map<string, MatchDoc>();
   for (const m of realKnockoutMatches) {
-    if (!m.externalId) continue;
-    const id = externalIdToMatchId(m.externalId);
+    const src = m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+    if (!src) continue;
+    const id = externalIdToMatchId(src);
     if (id) byId.set(id, m);
   }
   if (byId.size === 0) return null;

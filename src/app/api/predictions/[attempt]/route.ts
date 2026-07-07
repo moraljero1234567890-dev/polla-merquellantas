@@ -11,6 +11,7 @@ import {
   getPrediction,
   getUserByEmail,
   listAllPredictions,
+  refreshMatchScores,
   upsertPrediction,
 } from "@/lib/store";
 import {
@@ -156,6 +157,9 @@ export async function GET(
     );
   }
   const stored = await loadOrCreate(email, attempt);
+  // Refresh fixture data (throttled to ≤1 Wikipedia call/min) before
+  // recomputing the bracket so new knockout fixtures are available.
+  await refreshMatchScores();
   // Rebuild the knockout bracket from the current group picks so it always
   // reflects the official fixtures, even for predictions saved earlier.
   const prediction = await recomputeKnockout(stored);
