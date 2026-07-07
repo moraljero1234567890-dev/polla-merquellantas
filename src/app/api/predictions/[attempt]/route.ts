@@ -20,6 +20,7 @@ import {
   championFromFinal,
   computeGroupStandings,
   isGroupStageComplete,
+  patchKnockoutWithRealFixtures,
   realGroupStandings,
 } from "@/lib/bracket";
 import type {
@@ -75,25 +76,32 @@ async function recomputeKnockout(
     (isGroupStageComplete(groupMatches, prediction.groupScores)
       ? computeGroupStandings(groupMatches, prediction.groupScores)
       : null);
+  let knockout: PredictionDoc["knockout"];
   if (!standings) {
     // Group standings unavailable (scores missing from DB). Try building
     // the bracket directly from whatever real knockout fixtures are stored —
     // this covers the case where R32 and R16 fixtures are in the DB even
     // though some group match scores weren't scraped from Wikipedia.
     const directKnockout = buildKnockoutFromRealFixtures(knockoutMatches, prediction.knockout);
-    if (directKnockout) {
-      const champion = championFromFinal(directKnockout.final);
-      return { ...prediction, knockout: directKnockout, champion };
+    if (!directKnockout) {
+      return {
+        ...prediction,
+        knockout: { r32: [], r16: [], qf: [], sf: [], third: null, final: null },
+        champion: null,
+      };
     }
-    return {
-      ...prediction,
-      knockout: { r32: [], r16: [], qf: [], sf: [], third: null, final: null },
-      champion: null,
-    };
+    knockout = directKnockout;
+  } else {
+    // Pass real knockout match results so finished rounds (e.g. all R32 games)
+    // automatically propagate into the next round bracket for every user.
+    knockout = buildKnockoutFromGroup(standings, prediction.knockout, knockoutMatches);
   }
-  // Pass real knockout match results so finished rounds (e.g. all R32 games)
-  // automatically propagate into the next round bracket for every user.
-  const knockout = buildKnockoutFromGroup(standings, prediction.knockout, knockoutMatches);
+  // Final pass: directly overlay real team codes (and scores for finished
+  // matches) from DB onto every bracket slot. This guarantees users always see
+  // the correct real teams even when the propagation chain above broke due to a
+  // missing intermediate score (e.g. a missing R16 result leaves QF blank
+  // without this patch).
+  knockout = patchKnockoutWithRealFixtures(knockout, knockoutMatches);
   const champion = championFromFinal(knockout.final);
   return { ...prediction, knockout, champion };
 }

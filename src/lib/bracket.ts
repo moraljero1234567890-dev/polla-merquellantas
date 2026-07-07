@@ -712,6 +712,63 @@ export function buildKnockoutFromGroup(
   return { r32, r16, qf, sf, third, final };
 }
 
+/**
+ * Overlay real fixture data onto an already-built bracket.
+ *
+ * For each pick, if a real knockout fixture exists in the DB for that matchId
+ * (looked up via externalId or _id pattern), this function:
+ *   - Overwrites homeTeamCode/Name and awayTeamCode/Name with the real teams.
+ *   - Overwrites the score only for FINISHED matches (they're locked anyway).
+ *
+ * This is the last step in recomputeKnockout and ensures users ALWAYS see the
+ * correct real teams for the current round — even when the propagation chain
+ * broke due to missing intermediate scores.
+ */
+export function patchKnockoutWithRealFixtures(
+  knockout: PredictionDoc["knockout"],
+  realKnockoutMatches: MatchDoc[],
+): PredictionDoc["knockout"] {
+  const byId = new Map<string, MatchDoc>();
+  for (const m of realKnockoutMatches) {
+    const src = m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+    if (!src) continue;
+    const id = externalIdToMatchId(src);
+    if (id) byId.set(id, m);
+  }
+  if (byId.size === 0) return knockout;
+
+  function patch(pick: KnockoutPick): KnockoutPick {
+    const real = byId.get(pick.matchId);
+    if (!real) return pick;
+    const hCode = real.home.code || pick.homeTeamCode;
+    const aCode = real.away.code || pick.awayTeamCode;
+    const patched: KnockoutPick = {
+      ...pick,
+      homeTeamCode: hCode,
+      homeTeamName: real.home.code ? real.home.name : pick.homeTeamName,
+      awayTeamCode: aCode,
+      awayTeamName: real.away.code ? real.away.name : pick.awayTeamName,
+    };
+    if (real.status === "FINISHED" && real.score?.fullTime) {
+      const ft = real.score.fullTime;
+      const pen = real.score.penalties;
+      const penWinner: "home" | "away" | null =
+        pen ? (pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null) : null;
+      return { ...patched, home: ft.home, away: ft.away, penaltyWinner: penWinner };
+    }
+    return patched;
+  }
+
+  return {
+    r32: knockout.r32.map(patch),
+    r16: knockout.r16.map(patch),
+    qf: knockout.qf.map(patch),
+    sf: knockout.sf.map(patch),
+    third: knockout.third ? patch(knockout.third) : null,
+    final: knockout.final ? patch(knockout.final) : null,
+  };
+}
+
 export function championFromFinal(
   final: KnockoutPick | null,
 ): { code: string; name: string } | null {
