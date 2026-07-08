@@ -929,11 +929,14 @@ export default function PredictPage() {
   const groupComplete =
     totalGroupMatches > 0 && filledCount === totalGroupMatches;
 
-  // The server seeds the bracket from the real results once the group stage is
-  // over, so the knockout opens for everyone — even users who never finished
-  // their group picks. Before that it only fills in once the user completes
-  // their groups, so a populated R32 is the right signal either way.
-  const knockoutOpen = (prediction?.knockout.r32.length ?? 0) > 0;
+  // Show the knockout bracket if the server returned picks (r32 is populated)
+  // OR once the group stage has definitively ended (2026-06-29). The server
+  // now always returns a full bracket structure after that date, so everyone
+  // can predict the current round even if earlier rounds were wrong or skipped.
+  const GROUP_STAGE_ENDED_MS = new Date("2026-06-29T00:00:00Z").getTime();
+  const knockoutOpen =
+    Date.now() >= GROUP_STAGE_ENDED_MS ||
+    (prediction?.knockout.r32.length ?? 0) > 0;
 
   const knockoutFilled = useMemo(() => {
     if (!prediction) return 0;

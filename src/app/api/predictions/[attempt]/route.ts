@@ -19,6 +19,7 @@ import {
   buildKnockoutFromRealFixtures,
   championFromFinal,
   computeGroupStandings,
+  ensureKnockoutSlots,
   isGroupStageComplete,
   patchKnockoutWithRealFixtures,
   realGroupStandings,
@@ -77,30 +78,27 @@ async function recomputeKnockout(
       ? computeGroupStandings(groupMatches, prediction.groupScores)
       : null);
   let knockout: PredictionDoc["knockout"];
-  if (!standings) {
-    // Group standings unavailable (scores missing from DB). Try building
-    // the bracket directly from whatever real knockout fixtures are stored —
-    // this covers the case where R32 and R16 fixtures are in the DB even
-    // though some group match scores weren't scraped from Wikipedia.
-    const directKnockout = buildKnockoutFromRealFixtures(knockoutMatches, prediction.knockout);
-    if (!directKnockout) {
-      return {
-        ...prediction,
-        knockout: { r32: [], r16: [], qf: [], sf: [], third: null, final: null },
-        champion: null,
-      };
-    }
-    knockout = directKnockout;
-  } else {
+  if (standings) {
     // Pass real knockout match results so finished rounds (e.g. all R32 games)
     // automatically propagate into the next round bracket for every user.
     knockout = buildKnockoutFromGroup(standings, prediction.knockout, knockoutMatches);
+  } else {
+    // Group standings unavailable. Try building from real knockout fixtures.
+    // If none exist yet, fall back to the user's existing picks.
+    knockout =
+      buildKnockoutFromRealFixtures(knockoutMatches, prediction.knockout) ??
+      prediction.knockout;
   }
-  // Final pass: directly overlay real team codes (and scores for finished
-  // matches) from DB onto every bracket slot. This guarantees users always see
-  // the correct real teams even when the propagation chain above broke due to a
-  // missing intermediate score (e.g. a missing R16 result leaves QF blank
-  // without this patch).
+
+  // Always guarantee a full bracket structure (16 R32 + 8 R16 + 4 QF + ...)
+  // so the bracket section is never hidden by an empty r32 array. This lets
+  // users predict the current real round even if earlier rounds were wrong or
+  // never filled in.
+  knockout = ensureKnockoutSlots(knockout);
+
+  // Final pass: directly overlay real team codes (and locked scores for
+  // finished matches) from DB onto every bracket slot. This guarantees the
+  // correct real teams always show regardless of the propagation chain above.
   knockout = patchKnockoutWithRealFixtures(knockout, knockoutMatches);
   const champion = championFromFinal(knockout.final);
   return { ...prediction, knockout, champion };

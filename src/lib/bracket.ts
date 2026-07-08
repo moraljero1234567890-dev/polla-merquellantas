@@ -362,7 +362,7 @@ export function buildR32Seeds(
   }));
 }
 
-function emptyPick(
+export function emptyPick(
   matchId: string,
   stage: KnockoutPick["stage"],
   home: R32SeedTeam,
@@ -766,6 +766,38 @@ export function patchKnockoutWithRealFixtures(
     sf: knockout.sf.map(patch),
     third: knockout.third ? patch(knockout.third) : null,
     final: knockout.final ? patch(knockout.final) : null,
+  };
+}
+
+/**
+ * Guarantee that every round has the right number of pick slots.
+ * Called after bracket building so the client always sees a full structure
+ * and knockoutOpen stays true even before group standings are known.
+ * Existing picks are preserved; only missing slots are added as empty.
+ */
+export function ensureKnockoutSlots(
+  existing: PredictionDoc["knockout"],
+): PredictionDoc["knockout"] {
+  function fillSlots(
+    arr: KnockoutPick[],
+    count: number,
+    stage: KnockoutPick["stage"],
+    prefix: string,
+  ): KnockoutPick[] {
+    if (arr.length >= count) return arr;
+    const result = [...arr];
+    for (let i = result.length + 1; i <= count; i++) {
+      result.push(emptyPick(`${prefix}-${i}`, stage, null, null));
+    }
+    return result;
+  }
+  return {
+    r32: fillSlots(existing.r32, 16, "ROUND_OF_32", "R32"),
+    r16: fillSlots(existing.r16, 8, "ROUND_OF_16", "R16"),
+    qf: fillSlots(existing.qf, 4, "QUARTER_FINALS", "QF"),
+    sf: fillSlots(existing.sf, 2, "SEMI_FINALS", "SF"),
+    third: existing.third ?? emptyPick("THIRD-1", "THIRD_PLACE", null, null),
+    final: existing.final ?? emptyPick("FINAL-1", "FINAL", null, null),
   };
 }
 
