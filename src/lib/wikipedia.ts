@@ -418,7 +418,17 @@ function toMatchDoc(
     offsetHours: 0,
   };
   const { utcDate, date, time } = combineUtc(localDate, local);
-  const scoreInfo = parseScore(fields.score ?? "");
+  let scoreInfo = parseScore(fields.score ?? "");
+  // The football box template stores penalty goals in separate fields (penalties1 /
+  // penalties2) rather than embedding them in the score string. Read them when the
+  // score field alone didn't yield penalty data (e.g. "1–1 (a.e.t.)").
+  if (scoreInfo.status === "FINISHED" && scoreInfo.penaltyHome == null) {
+    const p1 = parseInt(fields.penalties1 ?? "", 10);
+    const p2 = parseInt(fields.penalties2 ?? "", 10);
+    if (!isNaN(p1) && !isNaN(p2)) {
+      scoreInfo = { ...scoreInfo, penaltyHome: p1, penaltyAway: p2 };
+    }
+  }
   const { venue, city } = parseStadium(fields.stadium ?? "");
 
   return {

@@ -510,9 +510,15 @@ export function buildKnockoutFromRealFixtures(
       return { ...fresh, home: ft.home, away: ft.away, penaltyWinner: penWinner };
     }
 
-    // Preserve user's pick if teams match.
+    // Preserve user's pick if teams are unknown (empty codes) or match exactly.
     const prev = prevArr?.find((p) => p.matchId === matchId);
-    if (prev && prev.homeTeamCode === fresh.homeTeamCode && prev.awayTeamCode === fresh.awayTeamCode) {
+    const codesKnown = !!(fresh.homeTeamCode && fresh.awayTeamCode);
+    if (
+      prev &&
+      (!codesKnown ||
+        (prev.homeTeamCode === fresh.homeTeamCode &&
+          prev.awayTeamCode === fresh.awayTeamCode))
+    ) {
       return { ...fresh, home: prev.home, away: prev.away, penaltyWinner: prev.penaltyWinner };
     }
     return fresh;
@@ -593,7 +599,13 @@ export function buildKnockoutFromGroup(
 
   function effectiveWinner(pick: KnockoutPick): R32SeedTeam {
     const key = knockoutIdentityKey(pick.stage, pick.homeTeamCode, pick.awayTeamCode);
-    if (key && realWinnerMap.has(key)) return realWinnerMap.get(key) ?? null;
+    if (key && realWinnerMap.has(key)) {
+      const w = realWinnerMap.get(key) ?? null;
+      // Only trust the real result when it resolved to a winner; a null winner
+      // (e.g. 0–0 draw with no penalty data yet) should fall through to the
+      // user's own pick so the propagation chain doesn't stall.
+      if (w) return w;
+    }
     return winnerOf(pick);
   }
 
@@ -638,10 +650,15 @@ export function buildKnockoutFromGroup(
     const id = `R16-${i + 1}`;
     const prev = existing?.r16?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "ROUND_OF_16", winA, winB);
+    // Preserve the user's pick if: (a) the propagated teams are unknown yet —
+    // so we don't lose a score the user already entered just because R32 results
+    // haven't propagated — OR (b) the teams match exactly.
+    const codesKnownR16 = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
-      prev.homeTeamCode === fresh.homeTeamCode &&
-      prev.awayTeamCode === fresh.awayTeamCode
+      (!codesKnownR16 ||
+        (prev.homeTeamCode === fresh.homeTeamCode &&
+          prev.awayTeamCode === fresh.awayTeamCode))
     ) {
       r16.push({ ...fresh, home: prev.home, away: prev.away, penaltyWinner: prev.penaltyWinner });
     } else {
@@ -657,10 +674,12 @@ export function buildKnockoutFromGroup(
     const id = `QF-${i + 1}`;
     const prev = existing?.qf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "QUARTER_FINALS", winA, winB);
+    const codesKnownQF = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
-      prev.homeTeamCode === fresh.homeTeamCode &&
-      prev.awayTeamCode === fresh.awayTeamCode
+      (!codesKnownQF ||
+        (prev.homeTeamCode === fresh.homeTeamCode &&
+          prev.awayTeamCode === fresh.awayTeamCode))
     ) {
       qf.push({ ...fresh, home: prev.home, away: prev.away, penaltyWinner: prev.penaltyWinner });
     } else {
@@ -676,10 +695,12 @@ export function buildKnockoutFromGroup(
     const id = `SF-${i + 1}`;
     const prev = existing?.sf?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "SEMI_FINALS", winA, winB);
+    const codesKnownSF = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
-      prev.homeTeamCode === fresh.homeTeamCode &&
-      prev.awayTeamCode === fresh.awayTeamCode
+      (!codesKnownSF ||
+        (prev.homeTeamCode === fresh.homeTeamCode &&
+          prev.awayTeamCode === fresh.awayTeamCode))
     ) {
       sf.push({ ...fresh, home: prev.home, away: prev.away, penaltyWinner: prev.penaltyWinner });
     } else {
@@ -691,10 +712,12 @@ export function buildKnockoutFromGroup(
   const sfLoserB = loserOf(sf[1]);
   const thirdFresh = emptyPick("THIRD-1", "THIRD_PLACE", sfLoserA, sfLoserB);
   const thirdPrev = existing?.third;
+  const codesKnownThird = !!(thirdFresh.homeTeamCode && thirdFresh.awayTeamCode);
   const third: KnockoutPick =
     thirdPrev &&
-    thirdPrev.homeTeamCode === thirdFresh.homeTeamCode &&
-    thirdPrev.awayTeamCode === thirdFresh.awayTeamCode
+    (!codesKnownThird ||
+      (thirdPrev.homeTeamCode === thirdFresh.homeTeamCode &&
+        thirdPrev.awayTeamCode === thirdFresh.awayTeamCode))
       ? { ...thirdFresh, home: thirdPrev.home, away: thirdPrev.away, penaltyWinner: thirdPrev.penaltyWinner }
       : thirdFresh;
 
@@ -702,10 +725,12 @@ export function buildKnockoutFromGroup(
   const sfWinB = effectiveWinner(sf[1]);
   const finalFresh = emptyPick("FINAL-1", "FINAL", sfWinA, sfWinB);
   const finalPrev = existing?.final;
+  const codesKnownFinal = !!(finalFresh.homeTeamCode && finalFresh.awayTeamCode);
   const final: KnockoutPick =
     finalPrev &&
-    finalPrev.homeTeamCode === finalFresh.homeTeamCode &&
-    finalPrev.awayTeamCode === finalFresh.awayTeamCode
+    (!codesKnownFinal ||
+      (finalPrev.homeTeamCode === finalFresh.homeTeamCode &&
+        finalPrev.awayTeamCode === finalFresh.awayTeamCode))
       ? { ...finalFresh, home: finalPrev.home, away: finalPrev.away, penaltyWinner: finalPrev.penaltyWinner }
       : finalFresh;
 
