@@ -477,12 +477,32 @@ const GROUP_KEYS = [
   "L",
 ] as const;
 
+// Wikipedia uses inconsistent section headings across years (hyphens, spaces,
+// capitalisation). Map every known variant so we don't silently drop stages.
 const KNOCKOUT_STAGES: Record<string, { stage: MatchStage; stageLabel: string }> = {
+  // Round of 32 (2026 format)
   "Round of 32": { stage: "ROUND_OF_32", stageLabel: "Dieciseisavos" },
+  "Round of thirty-two": { stage: "ROUND_OF_32", stageLabel: "Dieciseisavos" },
+  // Round of 16
   "Round of 16": { stage: "ROUND_OF_16", stageLabel: "Octavos" },
+  "Round of sixteen": { stage: "ROUND_OF_16", stageLabel: "Octavos" },
+  "Last 16": { stage: "ROUND_OF_16", stageLabel: "Octavos" },
+  // Quarter-finals — Wikipedia standard spelling uses a hyphen
+  "Quarter-finals": { stage: "QUARTER_FINALS", stageLabel: "Cuartos" },
+  "Quarter finals": { stage: "QUARTER_FINALS", stageLabel: "Cuartos" },
   Quarterfinals: { stage: "QUARTER_FINALS", stageLabel: "Cuartos" },
+  // Semi-finals
+  "Semi-finals": { stage: "SEMI_FINALS", stageLabel: "Semifinal" },
+  "Semi finals": { stage: "SEMI_FINALS", stageLabel: "Semifinal" },
   Semifinals: { stage: "SEMI_FINALS", stageLabel: "Semifinal" },
+  // Third place
   "Match for third place": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  "Third place": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  "Third-place play-off": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  "Third-place match": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  "Play-off for third place": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  "Bronze final": { stage: "THIRD_PLACE", stageLabel: "Tercer puesto" },
+  // Final
   Final: { stage: "FINAL", stageLabel: "Final" },
 };
 
@@ -509,6 +529,11 @@ async function parseGroupPage(letter: string): Promise<MatchDoc[]> {
 
 async function parseKnockoutPage(): Promise<MatchDoc[]> {
   const wt = await fetchWikitext("2026_FIFA_World_Cup_knockout_stage");
+  // Build a case-insensitive lookup so minor capitalisation differences
+  // in Wikipedia section headings don't silently drop entire rounds.
+  const stagesLower = new Map(
+    Object.entries(KNOCKOUT_STAGES).map(([k, v]) => [k.toLowerCase(), v]),
+  );
   const sectionRe = /^==\s*([^=]+?)\s*==\s*$/gm;
   const sections: Array<{ label: string; start: number }> = [];
   let sm: RegExpExecArray | null;
@@ -518,7 +543,7 @@ async function parseKnockoutPage(): Promise<MatchDoc[]> {
   const out: MatchDoc[] = [];
   for (let i = 0; i < sections.length; i++) {
     const { label, start } = sections[i];
-    const cfg = KNOCKOUT_STAGES[label];
+    const cfg = KNOCKOUT_STAGES[label] ?? stagesLower.get(label.toLowerCase());
     if (!cfg) continue;
     const end = sections[i + 1]?.start ?? wt.length;
     const segment = wt.slice(start, end);
