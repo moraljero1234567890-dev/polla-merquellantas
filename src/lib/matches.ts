@@ -16,6 +16,7 @@ export function colombiaKickoff(utcIso: string): { date: string; time: string } 
 
 export type ApiMatch = {
   _id: string;
+  externalId?: string;
   utcDate?: string;
   date: string;
   time: string;

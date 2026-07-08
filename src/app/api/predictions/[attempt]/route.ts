@@ -117,13 +117,39 @@ function findKnockoutPick(
   return null;
 }
 
-/** Kickoff time of the real fixture matching a knockout pick's teams, if any. */
+/** Kickoff time of the real fixture for a knockout match.
+ *  Tries matchId→externalId first (code-independent), then falls back to
+ *  the identity-key lookup (team codes). The matchId path is more reliable
+ *  when group standings contain wrong codes due to partial score data. */
 function knockoutKickoff(
   matches: Awaited<ReturnType<typeof getAllMatches>>,
   stage: string | null,
   homeCode: string,
   awayCode: string,
+  matchId?: string | null,
 ): string | null {
+  // Primary: resolve matchId → wiki _id (no team-code dependency).
+  if (matchId) {
+    const PREFIX: Record<string, string> = {
+      R32: "ROUND_OF_32",
+      R16: "ROUND_OF_16",
+      QF: "QUARTER_FINALS",
+      SF: "SEMI_FINALS",
+      THIRD: "THIRD_PLACE",
+      FINAL: "FINAL",
+    };
+    const parts = /^([A-Z]+)-(\d+)$/.exec(matchId);
+    if (parts) {
+      const ext = PREFIX[parts[1]];
+      if (ext) {
+        const wikiId = `wiki-${ext}-${parts[2]}`;
+        for (const m of matches) {
+          if (m._id === wikiId && m.utcDate) return m.utcDate;
+        }
+      }
+    }
+  }
+  // Fallback: identity key (team codes).
   const key = knockoutIdentityKey(stage, homeCode, awayCode);
   if (!key) return null;
   for (const m of matches) {
@@ -272,7 +298,7 @@ export async function POST(
     const pick = findKnockoutPick(prediction.knockout, body.matchId);
     const matches = await getAllMatches();
     const kickoff = pick
-      ? knockoutKickoff(matches, stage, pick.homeTeamCode, pick.awayTeamCode)
+      ? knockoutKickoff(matches, stage, pick.homeTeamCode, pick.awayTeamCode, body.matchId)
       : null;
     if (isKnockoutMatchLocked(stage, kickoff, now, user.nit)) {
       return NextResponse.json(

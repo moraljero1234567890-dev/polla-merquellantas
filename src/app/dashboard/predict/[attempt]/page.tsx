@@ -883,15 +883,43 @@ export default function PredictPage() {
     [groupMatches, groupDrafts],
   );
 
-  // Kickoff time of each real knockout fixture, keyed by stage + teams, so an
-  // individual match can lock the moment it kicks off even while its round is
-  // reopened for editing.
+  // Kickoff time of each real knockout fixture, keyed by stage + teams.
   const knockoutKickoffs = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of matches) {
       if (m.stage === "GROUP_STAGE" || !m.utcDate) continue;
       const key = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
       if (key) map.set(key, m.utcDate);
+    }
+    return map;
+  }, [matches]);
+
+  // Kickoff time of each real knockout fixture, keyed by synthetic matchId
+  // (R32-1, R16-3, QF-2, …) derived from the Wikipedia externalId or _id.
+  // This lookup does NOT depend on team codes and is used as the primary lock
+  // source, because a team-code mismatch (wrong standings, partial data) would
+  // silently leave past matches editable.
+  const knockoutKickoffsByMatchId = useMemo(() => {
+    const PREFIX: Record<string, string> = {
+      ROUND_OF_32: "R32",
+      ROUND_OF_16: "R16",
+      QUARTER_FINALS: "QF",
+      SEMI_FINALS: "SF",
+      THIRD_PLACE: "THIRD",
+      FINAL: "FINAL",
+    };
+    const map = new Map<string, string>();
+    for (const m of matches) {
+      if (m.stage === "GROUP_STAGE" || !m.utcDate) continue;
+      const src =
+        m.externalId ??
+        (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+      if (!src) continue;
+      const parts = /^([A-Z_]+)-(\d+)$/.exec(src);
+      if (!parts) continue;
+      const prefix = PREFIX[parts[1]];
+      if (!prefix) continue;
+      map.set(`${prefix}-${parts[2]}`, m.utcDate);
     }
     return map;
   }, [matches]);
@@ -911,15 +939,23 @@ export default function PredictPage() {
 
   const knockoutPickLocked = useCallback(
     (pick: KnockoutPick): boolean => {
+      const now = Date.now();
+      // Primary: look up by matchId → externalId (code-independent). This
+      // catches past matches even when team-code mismatches break the key lookup.
+      const directKickoff = knockoutKickoffsByMatchId.get(pick.matchId) ?? null;
+      if (directKickoff) {
+        return isKnockoutMatchLocked(pick.stage, directKickoff, now, session?.nit);
+      }
+      // Fallback: look up by identity key (team codes).
       const key = knockoutIdentityKey(
         pick.stage,
         pick.homeTeamCode,
         pick.awayTeamCode,
       );
       const kickoff = key ? knockoutKickoffs.get(key) ?? null : null;
-      return isKnockoutMatchLocked(pick.stage, kickoff, Date.now(), session?.nit);
+      return isKnockoutMatchLocked(pick.stage, kickoff, now, session?.nit);
     },
-    [knockoutKickoffs, session?.nit],
+    [knockoutKickoffsByMatchId, knockoutKickoffs, session?.nit],
   );
 
   const filledCount = Object.values(groupDrafts).filter(
