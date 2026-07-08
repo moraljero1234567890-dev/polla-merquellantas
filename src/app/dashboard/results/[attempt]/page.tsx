@@ -24,13 +24,7 @@ const STAGE_TITLES: Record<KnockoutPick["stage"], string> = {
 };
 
 
-type MatchWithScore = ApiMatch & {
-  score?: {
-    fullTime: { home: number; away: number } | null;
-    penalties?: { home: number; away: number } | null;
-  } | null;
-  status?: string;
-};
+type MatchWithScore = ApiMatch;
 
 function pickClass(
   predicted: { home: number; away: number } | null,
@@ -127,8 +121,8 @@ export default function ResultsPage() {
     [score],
   );
 
-  // Build a map from ISO team code → real MatchDoc for knockout stages, keyed
-  // by stage + sorted team codes so we can look up the real result per pick.
+  // Real knockout fixtures indexed two ways so we can find the result for any
+  // pick regardless of whether team codes or matchId ordering aligns exactly.
   const knockoutMatchByKey = useMemo(() => {
     const map = new Map<string, MatchWithScore>();
     for (const m of matches) {
@@ -142,11 +136,43 @@ export default function ResultsPage() {
     return map;
   }, [matches]);
 
+  const knockoutMatchByMatchId = useMemo(() => {
+    const PREFIX: Record<string, string> = {
+      ROUND_OF_32: "R32",
+      ROUND_OF_16: "R16",
+      QUARTER_FINALS: "QF",
+      SEMI_FINALS: "SF",
+      THIRD_PLACE: "THIRD",
+      FINAL: "FINAL",
+    };
+    const map = new Map<string, MatchWithScore>();
+    for (const m of matches) {
+      if (m.stage === "GROUP_STAGE") continue;
+      const src = m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+      if (!src) continue;
+      const parts = /^([A-Z_]+)-(\d+)$/.exec(src);
+      if (!parts) continue;
+      const prefix = PREFIX[parts[1]];
+      if (!prefix) continue;
+      map.set(`${prefix}-${parts[2]}`, m);
+    }
+    return map;
+  }, [matches]);
+
   function knockoutKey(stage: string, codeA: string, codeB: string): string | null {
     const a = codeA.trim().toLowerCase();
     const b = codeB.trim().toLowerCase();
     if (!stage || !a || !b) return null;
     return `${stage}|${[a, b].sort().join("~")}`;
+  }
+
+  function findRealMatch(matchId: string, stage: string, codeA: string, codeB: string): MatchWithScore | null {
+    // Primary: matchId-based (code-independent)
+    const byId = knockoutMatchByMatchId.get(matchId);
+    if (byId) return byId;
+    // Fallback: identity key
+    const key = knockoutKey(stage, codeA, codeB);
+    return key ? (knockoutMatchByKey.get(key) ?? null) : null;
   }
 
   function handleLogout() {
@@ -438,11 +464,7 @@ export default function ResultsPage() {
                           const pts = isScored
                             ? (score?.breakdown.knockout?.byMatch[p.matchId] ?? null)
                             : null;
-                          const realMatch = isScored
-                            ? knockoutMatchByKey.get(
-                                knockoutKey(stage, p.homeTeamCode, p.awayTeamCode) ?? "",
-                              )
-                            : null;
+                          const realMatch = findRealMatch(p.matchId, stage, p.homeTeamCode, p.awayTeamCode);
                           const realFt = realMatch?.score?.fullTime ?? null;
                           return (
                             <li
@@ -478,7 +500,7 @@ export default function ResultsPage() {
                                   )}
                                 </div>
                                 <div className="text-center font-mono font-black tabular-nums">
-                                  {isScored && realFt ? (
+                                  {realFt ? (
                                     <div className="space-y-0.5">
                                       <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">Tú</div>
                                       <div className="text-base">
@@ -529,9 +551,7 @@ export default function ResultsPage() {
                       const a = displayTeam(p.awayTeamCode, p.awayTeamName);
                       const stage = key === "third" ? "THIRD_PLACE" : "FINAL";
                       const pts = score?.breakdown.knockout?.byMatch[p.matchId] ?? null;
-                      const realMatch = knockoutMatchByKey.get(
-                        knockoutKey(stage, p.homeTeamCode, p.awayTeamCode) ?? "",
-                      );
+                      const realMatch = findRealMatch(p.matchId, stage, p.homeTeamCode, p.awayTeamCode);
                       const realFt = realMatch?.score?.fullTime ?? null;
                       return (
                         <div key={key}>

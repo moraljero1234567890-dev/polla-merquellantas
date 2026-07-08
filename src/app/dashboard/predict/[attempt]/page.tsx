@@ -454,6 +454,7 @@ function BracketCard({
   size = "sm",
   disabled = false,
   kickoffLabel,
+  realScore,
 }: {
   pick: KnockoutPick;
   onChange: (home: number | null, away: number | null) => void;
@@ -462,18 +463,23 @@ function BracketCard({
   size?: "sm" | "lg";
   disabled?: boolean;
   kickoffLabel?: string;
+  realScore?: { home: number; away: number; penWinner: "home" | "away" | null } | null;
 }) {
-  const isTie =
-    pick.home != null && pick.away != null && pick.home === pick.away;
+  // For locked (disabled) cards, display the actual match result when available.
+  const displayHome = disabled && realScore != null ? realScore.home : pick.home;
+  const displayAway = disabled && realScore != null ? realScore.away : pick.away;
+  const displayPenWinner = disabled && realScore != null ? realScore.penWinner : pick.penaltyWinner;
+
+  const isTie = displayHome != null && displayAway != null && displayHome === displayAway;
   const home = displayTeam(pick.homeTeamCode, pick.homeTeamName);
   const away = displayTeam(pick.awayTeamCode, pick.awayTeamName);
   const winner =
-    pick.home != null && pick.away != null
-      ? pick.home > pick.away
+    displayHome != null && displayAway != null
+      ? displayHome > displayAway
         ? "home"
-        : pick.away > pick.home
+        : displayAway > displayHome
           ? "away"
-          : pick.penaltyWinner
+          : displayPenWinner
       : null;
   const inputSize = size === "lg" ? "lg" : "sm";
   const flagCls = size === "lg" ? "h-7 w-10" : "h-5 w-7";
@@ -532,9 +538,9 @@ function BracketCard({
           {kickoffLabel}
         </div>
       )}
-      {row("home", home, pick.home, (v) => onChange(v, pick.away))}
+      {row("home", home, displayHome, (v) => onChange(v, pick.away))}
       <div className="h-px bg-[var(--line)]" />
-      {row("away", away, pick.away, (v) => onChange(pick.home, v))}
+      {row("away", away, displayAway, (v) => onChange(pick.home, v))}
       {isTie && !disabled && (
         <div className="border-t border-dashed border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
           <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-[var(--foreground-muted)]">
@@ -957,6 +963,50 @@ export default function PredictPage() {
     },
     [knockoutKickoffsByMatchId, knockoutKickoffs, session?.nit],
   );
+
+  // Real scores for FINISHED knockout matches, keyed by synthetic matchId.
+  // Used to display actual results on locked bracket cards regardless of whether
+  // patchKnockoutWithRealFixtures correctly applied the score via the pick.
+  const knockoutRealScores = useMemo(() => {
+    const PREFIX: Record<string, string> = {
+      ROUND_OF_32: "R32",
+      ROUND_OF_16: "R16",
+      QUARTER_FINALS: "QF",
+      SEMI_FINALS: "SF",
+      THIRD_PLACE: "THIRD",
+      FINAL: "FINAL",
+    };
+    const map = new Map<
+      string,
+      { home: number; away: number; penWinner: "home" | "away" | null }
+    >();
+    for (const m of matches) {
+      if (m.stage === "GROUP_STAGE" || m.status !== "FINISHED") continue;
+      const ft = m.score?.fullTime;
+      if (!ft) continue;
+      const src =
+        m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+      let matchId: string | null = null;
+      if (src) {
+        const parts = /^([A-Z_]+)-(\d+)$/.exec(src);
+        if (parts) {
+          const prefix = PREFIX[parts[1]];
+          if (prefix) matchId = `${prefix}-${parts[2]}`;
+        }
+      }
+      if (!matchId) continue;
+      const pen = m.score?.penalties;
+      const penWinner: "home" | "away" | null = pen
+        ? pen.home > pen.away
+          ? "home"
+          : pen.away > pen.home
+            ? "away"
+            : null
+        : null;
+      map.set(matchId, { home: ft.home, away: ft.away, penWinner });
+    }
+    return map;
+  }, [matches]);
 
   const filledCount = Object.values(groupDrafts).filter(
     (d) => typeof d.home === "number" && typeof d.away === "number",
@@ -1504,6 +1554,7 @@ export default function PredictPage() {
                                     const key = knockoutIdentityKey(p.stage, p.homeTeamCode, p.awayTeamCode);
                                     return key ? knockoutKickoffLabels.get(key) : undefined;
                                   })()}
+                                  realScore={knockoutRealScores.get(p.matchId) ?? null}
                                   onChange={(h, a) =>
                                     queueKnockoutSave(
                                       p.matchId,
@@ -1546,6 +1597,7 @@ export default function PredictPage() {
                           const key = knockoutIdentityKey(t.stage, t.homeTeamCode, t.awayTeamCode);
                           return key ? knockoutKickoffLabels.get(key) : undefined;
                         })()}
+                        realScore={knockoutRealScores.get(prediction.knockout.third.matchId) ?? null}
                         onChange={(h, a) =>
                           queueKnockoutSave(
                             prediction.knockout.third!.matchId,

@@ -27,6 +27,10 @@ export type ApiMatch = {
   stage: string;
   stageLabel: string;
   status?: string;
+  score?: {
+    fullTime?: { home: number; away: number } | null;
+    penalties?: { home: number; away: number } | null;
+  } | null;
   home: { code: string; name: string; crest: string };
   away: { code: string; name: string; crest: string };
 };
