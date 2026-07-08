@@ -597,6 +597,38 @@ export function buildKnockoutFromGroup(
     }
   }
 
+  // Build a matchId → real fixture map so we can use REAL team codes for each
+  // slot. This is critical: patchKnockoutWithRealFixtures uses the same source
+  // to override team codes at the end of recomputeKnockout, so using it here
+  // makes fresh.homeTeamCode always agree with prev.homeTeamCode (both derive
+  // from the real fixture), enabling score preservation across recomputes.
+  const realById = new Map<string, MatchDoc>();
+  if (realKnockoutMatches) {
+    for (const m of realKnockoutMatches) {
+      const src = m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+      if (!src) continue;
+      const id = externalIdToMatchId(src);
+      if (id) realById.set(id, m);
+    }
+  }
+
+  /** Return real fixture teams for the slot when available, falling back to
+   *  the propagation-derived teams (winA/winB). */
+  function realOrPropagated(
+    matchId: string,
+    winA: R32SeedTeam,
+    winB: R32SeedTeam,
+  ): [R32SeedTeam, R32SeedTeam] {
+    const real = realById.get(matchId);
+    const h = real?.home.code
+      ? { code: real.home.code, name: real.home.name }
+      : winA;
+    const a = real?.away.code
+      ? { code: real.away.code, name: real.away.name }
+      : winB;
+    return [h, a];
+  }
+
   function effectiveWinner(pick: KnockoutPick): R32SeedTeam {
     const key = knockoutIdentityKey(pick.stage, pick.homeTeamCode, pick.awayTeamCode);
     if (key && realWinnerMap.has(key)) {
@@ -648,11 +680,9 @@ export function buildKnockoutFromGroup(
     const winA = effectiveWinner(r32[a]);
     const winB = effectiveWinner(r32[b]);
     const id = `R16-${i + 1}`;
+    const [homeTeam, awayTeam] = realOrPropagated(id, winA, winB);
     const prev = existing?.r16?.find((p) => p.matchId === id);
-    const fresh = emptyPick(id, "ROUND_OF_16", winA, winB);
-    // Preserve the user's pick if: (a) the propagated teams are unknown yet —
-    // so we don't lose a score the user already entered just because R32 results
-    // haven't propagated — OR (b) the teams match exactly.
+    const fresh = emptyPick(id, "ROUND_OF_16", homeTeam, awayTeam);
     const codesKnownR16 = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
@@ -672,8 +702,9 @@ export function buildKnockoutFromGroup(
     const winA = effectiveWinner(r16[a]);
     const winB = effectiveWinner(r16[b]);
     const id = `QF-${i + 1}`;
+    const [homeTeam, awayTeam] = realOrPropagated(id, winA, winB);
     const prev = existing?.qf?.find((p) => p.matchId === id);
-    const fresh = emptyPick(id, "QUARTER_FINALS", winA, winB);
+    const fresh = emptyPick(id, "QUARTER_FINALS", homeTeam, awayTeam);
     const codesKnownQF = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
@@ -693,8 +724,9 @@ export function buildKnockoutFromGroup(
     const winA = effectiveWinner(qf[a]);
     const winB = effectiveWinner(qf[b]);
     const id = `SF-${i + 1}`;
+    const [homeTeam, awayTeam] = realOrPropagated(id, winA, winB);
     const prev = existing?.sf?.find((p) => p.matchId === id);
-    const fresh = emptyPick(id, "SEMI_FINALS", winA, winB);
+    const fresh = emptyPick(id, "SEMI_FINALS", homeTeam, awayTeam);
     const codesKnownSF = !!(fresh.homeTeamCode && fresh.awayTeamCode);
     if (
       prev &&
@@ -710,7 +742,8 @@ export function buildKnockoutFromGroup(
 
   const sfLoserA = loserOf(sf[0]);
   const sfLoserB = loserOf(sf[1]);
-  const thirdFresh = emptyPick("THIRD-1", "THIRD_PLACE", sfLoserA, sfLoserB);
+  const [thirdHome, thirdAway] = realOrPropagated("THIRD-1", sfLoserA, sfLoserB);
+  const thirdFresh = emptyPick("THIRD-1", "THIRD_PLACE", thirdHome, thirdAway);
   const thirdPrev = existing?.third;
   const codesKnownThird = !!(thirdFresh.homeTeamCode && thirdFresh.awayTeamCode);
   const third: KnockoutPick =
@@ -723,7 +756,8 @@ export function buildKnockoutFromGroup(
 
   const sfWinA = effectiveWinner(sf[0]);
   const sfWinB = effectiveWinner(sf[1]);
-  const finalFresh = emptyPick("FINAL-1", "FINAL", sfWinA, sfWinB);
+  const [finalHome, finalAway] = realOrPropagated("FINAL-1", sfWinA, sfWinB);
+  const finalFresh = emptyPick("FINAL-1", "FINAL", finalHome, finalAway);
   const finalPrev = existing?.final;
   const codesKnownFinal = !!(finalFresh.homeTeamCode && finalFresh.awayTeamCode);
   const final: KnockoutPick =
