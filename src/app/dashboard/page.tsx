@@ -102,12 +102,6 @@ export default function DashboardPage() {
             <span className="hidden text-sm text-[var(--foreground-soft)] sm:inline">
               {session.name}
             </span>
-            <Link
-              href="/dashboard/leaderboard"
-              className="rounded-sm border border-[var(--line)] px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
-            >
-              Tabla de posiciones
-            </Link>
             <button
               onClick={handleLogout}
               className="rounded-sm border border-[var(--line)] px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
