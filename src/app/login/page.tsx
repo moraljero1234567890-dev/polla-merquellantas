@@ -173,6 +173,11 @@ export default function LoginPage() {
               </p>
             </div>
 
+            <div className="mt-6 border-l-4 border-[var(--brand)] bg-[var(--brand-soft)] px-4 py-3 text-sm text-[var(--brand-dark)]">
+              Ingresa con el NIT o cédula con la que has hecho tus compras en
+              Merquellantas.
+            </div>
+
             <form
               onSubmit={handleSubmit}
               className="mt-8 space-y-5"
