@@ -198,18 +198,16 @@ export default function DashboardPage() {
                         href={`/dashboard/predict/${row.attempt}`}
                         className="inline-flex h-11 items-center justify-center bg-[var(--brand)] px-5 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--brand-dark)]"
                       >
-                        {completed
-                          ? "Editar"
-                          : row.groupCount > 0
-                            ? "Continuar"
-                            : "Comenzar"}
+                        {row.groupCount > 0 || completed
+                          ? "Editar mis predicciones"
+                          : "Comenzar"}
                       </Link>
                       {(completed || row.groupCount > 0) && (
                         <Link
                           href={`/dashboard/results/${row.attempt}`}
                           className="inline-flex h-11 items-center justify-center border border-[var(--foreground)] px-5 text-sm font-semibold uppercase tracking-[0.18em] transition hover:bg-[var(--foreground)] hover:text-white"
                         >
-                          Puntos y resultados
+                          Ver cómo voy
                         </Link>
                       )}
                     </div>

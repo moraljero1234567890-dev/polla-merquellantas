@@ -1488,22 +1488,6 @@ export default function PredictPage() {
                       {(
                         [
                           {
-                            stage: "ROUND_OF_32" as const,
-                            picks: orderPicks(
-                              prediction.knockout.r32,
-                              "ROUND_OF_32",
-                            ),
-                            width: 230,
-                          },
-                          {
-                            stage: "ROUND_OF_16" as const,
-                            picks: orderPicks(
-                              prediction.knockout.r16,
-                              "ROUND_OF_16",
-                            ),
-                            width: 220,
-                          },
-                          {
                             stage: "QUARTER_FINALS" as const,
                             picks: orderPicks(
                               prediction.knockout.qf,
