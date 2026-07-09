@@ -59,15 +59,24 @@ export function isKnockoutMatchLocked(
   return false;
 }
 
+// Hard cutoffs for rounds whose matches have all concluded.
+// Used as a safety net when individual kickoff times are missing from the DB.
+const STAGE_HARD_LOCK: Partial<Record<KnockoutStage, string>> = {
+  ROUND_OF_32: "2026-07-03T00:00:00Z", // all R32 matches ended by July 2
+  ROUND_OF_16: "2026-07-08T00:00:00Z", // all R16 matches ended by July 7
+};
+
 /**
- * Stage-level lock — always returns false.
- * Each match locks individually at its own kickoff time, not by round.
+ * Stage-level lock. Returns true for rounds whose cutoff date is in the past,
+ * ensuring the entire column is disabled even if individual kickoff data is missing.
  */
 export function isKnockoutStageLocked(
-  _stage: string | null | undefined,
-  _now: number = Date.now(),
+  stage: string | null | undefined,
+  now: number = Date.now(),
   _userNit?: string | null,
 ): boolean {
+  const cutoff = stage ? STAGE_HARD_LOCK[stage as KnockoutStage] : undefined;
+  if (cutoff && now >= new Date(cutoff).getTime()) return true;
   return false;
 }
 

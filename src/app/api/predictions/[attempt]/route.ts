@@ -10,7 +10,6 @@ import {
   getAllMatches,
   getPrediction,
   getUserByEmail,
-  listAllPredictions,
   refreshMatchScores,
   upsertPrediction,
 } from "@/lib/store";
@@ -195,12 +194,11 @@ export async function GET(
   // Rebuild the knockout bracket from the current group picks so it always
   // reflects the official fixtures, even for predictions saved earlier.
   const prediction = await recomputeKnockout(stored);
-  // Scored against the full prediction pool so unique-exact bonuses are right.
-  const [matches, allPredictions] = await Promise.all([
-    getAllMatches(),
-    listAllPredictions(),
-  ]);
-  const scores = scorePredictions(matches, allPredictions);
+  // Score the recomputed prediction (which has real team codes from
+  // patchKnockoutWithRealFixtures) rather than the raw DB copy, so knockout
+  // scoring correctly matches picks to real fixtures via identity key.
+  const matches = await getAllMatches();
+  const scores = scorePredictions(matches, [prediction]);
   const score = scores.get(prediction._id) ?? emptyAttemptScore();
   return NextResponse.json({ prediction, score });
 }

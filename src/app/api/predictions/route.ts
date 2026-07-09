@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { scorePredictions } from "@/lib/scoring";
+import { patchKnockoutWithRealFixtures } from "@/lib/bracket";
 import {
   getAllMatches,
   getUserByEmail,
@@ -24,8 +25,12 @@ export async function GET(request: Request) {
     getAllMatches(),
     listAllPredictions(),
   ]);
-  // Scored against the full prediction pool so unique-exact bonuses are right.
-  const scores = scorePredictions(matches, allPredictions);
+  const knockoutMatches = matches.filter((m) => m.stage !== "GROUP_STAGE");
+  const patchedPredictions = allPredictions.map((p) => ({
+    ...p,
+    knockout: patchKnockoutWithRealFixtures(p.knockout, knockoutMatches),
+  }));
+  const scores = scorePredictions(matches, patchedPredictions);
   return NextResponse.json({
     user: {
       email: user.email,

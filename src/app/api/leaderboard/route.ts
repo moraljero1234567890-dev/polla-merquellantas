@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { computeLeaderboard } from "@/lib/scoring";
+import { patchKnockoutWithRealFixtures } from "@/lib/bracket";
 import {
   getAllMatches,
   getUserByEmail,
@@ -33,9 +34,14 @@ export async function GET(request: NextRequest) {
       listAllPredictions(),
       listAllUsers(),
     ]);
+    const knockoutMatches = matches.filter((m) => m.stage !== "GROUP_STAGE");
+    const patchedPredictions = predictions.map((p) => ({
+      ...p,
+      knockout: patchKnockoutWithRealFixtures(p.knockout, knockoutMatches),
+    }));
     const ranked = computeLeaderboard(
       matches,
-      predictions,
+      patchedPredictions,
       users.map((u) => ({
         email: u.email,
         name: u.name,
