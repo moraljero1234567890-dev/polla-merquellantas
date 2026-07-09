@@ -390,5 +390,10 @@ export async function POST(
   prediction = await recomputeKnockout(prediction);
   prediction.updatedAt = new Date();
   await upsertPrediction(prediction);
-  return NextResponse.json({ prediction });
+  // Bake official results into locked slots for the predict page response,
+  // same as GET — so locked R32/R16 cards keep showing real scores after save.
+  const allMatchesPost = await getAllMatches();
+  const knockoutMatchesPost = allMatchesPost.filter((m) => m.stage !== "GROUP_STAGE");
+  const displayPredictionPost = { ...prediction, knockout: bakeKnockoutScores(prediction.knockout, knockoutMatchesPost) };
+  return NextResponse.json({ prediction: displayPredictionPost });
 }

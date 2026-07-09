@@ -1020,8 +1020,9 @@ export default function PredictPage() {
   // now always returns a full bracket structure after that date, so everyone
   // can predict the current round even if earlier rounds were wrong or skipped.
   const GROUP_STAGE_ENDED_MS = new Date("2026-06-29T00:00:00Z").getTime();
+  const groupStageDone = Date.now() >= GROUP_STAGE_ENDED_MS;
   const knockoutOpen =
-    Date.now() >= GROUP_STAGE_ENDED_MS ||
+    groupStageDone ||
     (prediction?.knockout.r32.length ?? 0) > 0;
 
   const knockoutFilled = useMemo(() => {
@@ -1042,7 +1043,7 @@ export default function PredictPage() {
 
   const totalKnockout = 32;
   const allDone =
-    groupComplete &&
+    (groupStageDone || groupComplete) &&
     knockoutFilled === totalKnockout &&
     !!prediction?.champion;
 
@@ -1307,19 +1308,22 @@ export default function PredictPage() {
               Boleta · Intento {attemptNum}
             </p>
             <h1 className="mt-3 text-3xl font-black uppercase leading-tight md:text-5xl">
-              Llena tu pronóstico
+              {groupStageDone ? "Tu llave de eliminatorias" : "Llena tu pronóstico"}
             </h1>
             <p className="mt-3 max-w-xl text-white/70">
-              Predice el marcador exacto de cada partido. Al terminar la fase de
-              grupos calculamos tu llave de eliminatorias.
+              {groupStageDone
+                ? "La fase de grupos terminó. Los resultados de dieciseisavos y octavos son los oficiales — solo puedes predecir los partidos que faltan."
+                : "Predice el marcador exacto de cada partido. Al terminar la fase de grupos calculamos tu llave de eliminatorias."}
             </p>
             <div className="mt-6 grid max-w-md grid-cols-2 gap-6 font-mono text-[11px] uppercase tracking-[0.28em] text-white/60">
-              <div>
-                <dt>Fase de grupos</dt>
-                <dd className="mt-1 text-2xl font-black tabular-nums text-white">
-                  {filledCount}/{totalGroupMatches || "—"}
-                </dd>
-              </div>
+              {!groupStageDone && (
+                <div>
+                  <dt>Fase de grupos</dt>
+                  <dd className="mt-1 text-2xl font-black tabular-nums text-white">
+                    {filledCount}/{totalGroupMatches || "—"}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Eliminatorias</dt>
                 <dd className="mt-1 text-2xl font-black tabular-nums text-white">
@@ -1344,105 +1348,109 @@ export default function PredictPage() {
               </div>
             )}
 
-            <section className="sticky top-[65px] z-20 border-b border-[var(--line)] bg-[var(--background)]/95 backdrop-blur">
-              <div className="mx-auto max-w-6xl px-6 py-4">
-                <div className="flex items-center gap-3 overflow-x-auto pb-1">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
-                    Grupo
-                  </span>
-                  <div className="flex gap-2">
-                    {groupKeys.map((g) => {
-                      const active = g === activeGroup;
-                      const groupFilled = (matchesByGroup[g] ?? []).every(
-                        (m) => {
-                          const d = groupDrafts[m._id];
-                          return (
-                            d &&
-                            typeof d.home === "number" &&
-                            typeof d.away === "number"
+            {!groupStageDone && (
+              <>
+                <section className="sticky top-[65px] z-20 border-b border-[var(--line)] bg-[var(--background)]/95 backdrop-blur">
+                  <div className="mx-auto max-w-6xl px-6 py-4">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
+                        Grupo
+                      </span>
+                      <div className="flex gap-2">
+                        {groupKeys.map((g) => {
+                          const active = g === activeGroup;
+                          const groupFilled = (matchesByGroup[g] ?? []).every(
+                            (m) => {
+                              const d = groupDrafts[m._id];
+                              return (
+                                d &&
+                                typeof d.home === "number" &&
+                                typeof d.away === "number"
+                              );
+                            },
                           );
-                        },
-                      );
-                      return (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setActiveGroup(g)}
-                          className={
-                            "relative h-10 min-w-10 shrink-0 border px-3 font-mono text-base font-black transition " +
-                            (active
-                              ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                              : groupFilled
-                                ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                                : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)]")
-                          }
-                        >
-                          {g}
-                          {groupFilled && !active && (
-                            <span
-                              aria-hidden
-                              className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-600"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="mx-auto max-w-6xl px-6 py-10">
-              <div className="border-l-4 border-[var(--brand)] bg-white p-6">
-                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[var(--brand)]">
-                  Grupo {activeGroup}
-                </p>
-                <p className="mt-2 text-sm text-[var(--foreground-soft)]">
-                  Llena el marcador de cada partido. Los cambios se guardan
-                  automáticamente.
-                </p>
-              </div>
-              <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-                <div className="lg:order-2 lg:sticky lg:top-[150px]">
-                  <GroupStandingsTable
-                    group={activeGroup}
-                    rows={standingsByGroup[activeGroup] ?? []}
-                  />
-                </div>
-                <div className="space-y-8 lg:order-1">
-                  {matchdaysForActive.map((md) => {
-                    const list = groupMatchesForActive.filter(
-                      (m) => m.matchday === md,
-                    );
-                    if (!list.length) return null;
-                    return (
-                      <div key={md}>
-                        <div className="mb-3 flex items-baseline justify-between border-b border-[var(--foreground)] pb-2">
-                          <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
-                            Jornada {md}
-                          </h2>
-                          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
-                            {list[0].date ? formatDate(list[0].date) : ""}
-                          </span>
-                        </div>
-                        <ul className="grid gap-3">
-                          {list.map((m) => (
-                            <GroupMatchRow
-                              key={m._id}
-                              match={m}
-                              score={groupDrafts[m._id]}
-                              onChange={(h, a) => queueGroupSave(m._id, h, a)}
-                              onCommit={() => flushMatch(m._id)}
-                              locked={isGroupMatchLocked(m.utcDate)}
-                            />
-                          ))}
-                        </ul>
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setActiveGroup(g)}
+                              className={
+                                "relative h-10 min-w-10 shrink-0 border px-3 font-mono text-base font-black transition " +
+                                (active
+                                  ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                                  : groupFilled
+                                    ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                    : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)]")
+                              }
+                            >
+                              {g}
+                              {groupFilled && !active && (
+                                <span
+                                  aria-hidden
+                                  className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-600"
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mx-auto max-w-6xl px-6 py-10">
+                  <div className="border-l-4 border-[var(--brand)] bg-white p-6">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[var(--brand)]">
+                      Grupo {activeGroup}
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--foreground-soft)]">
+                      Llena el marcador de cada partido. Los cambios se guardan
+                      automáticamente.
+                    </p>
+                  </div>
+                  <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="lg:order-2 lg:sticky lg:top-[150px]">
+                      <GroupStandingsTable
+                        group={activeGroup}
+                        rows={standingsByGroup[activeGroup] ?? []}
+                      />
+                    </div>
+                    <div className="space-y-8 lg:order-1">
+                      {matchdaysForActive.map((md) => {
+                        const list = groupMatchesForActive.filter(
+                          (m) => m.matchday === md,
+                        );
+                        if (!list.length) return null;
+                        return (
+                          <div key={md}>
+                            <div className="mb-3 flex items-baseline justify-between border-b border-[var(--foreground)] pb-2">
+                              <h2 className="font-mono text-xs font-bold uppercase tracking-[0.3em]">
+                                Jornada {md}
+                              </h2>
+                              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--foreground-muted)]">
+                                {list[0].date ? formatDate(list[0].date) : ""}
+                              </span>
+                            </div>
+                            <ul className="grid gap-3">
+                              {list.map((m) => (
+                                <GroupMatchRow
+                                  key={m._id}
+                                  match={m}
+                                  score={groupDrafts[m._id]}
+                                  onChange={(h, a) => queueGroupSave(m._id, h, a)}
+                                  onCommit={() => flushMatch(m._id)}
+                                  locked={isGroupMatchLocked(m.utcDate)}
+                                />
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
 
             <section className="mx-auto max-w-6xl px-6 pb-16">
               <div className="border-t border-[var(--line)] pt-10">
