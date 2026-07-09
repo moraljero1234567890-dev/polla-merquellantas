@@ -501,15 +501,6 @@ export function buildKnockoutFromRealFixtures(
     const a = (real?.away.code ? { code: real.away.code, name: real.away.name } : away);
     const fresh = emptyPick(matchId, stage, h, a);
 
-    // If the match is already finished, use the real score.
-    if (real?.status === "FINISHED" && real.score?.fullTime) {
-      const ft = real.score.fullTime;
-      const pen = real.score.penalties;
-      let penWinner: "home" | "away" | null = null;
-      if (pen) penWinner = pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null;
-      return { ...fresh, home: ft.home, away: ft.away, penaltyWinner: penWinner };
-    }
-
     // Preserve user's pick if teams are unknown (empty codes) or match exactly.
     const prev = prevArr?.find((p) => p.matchId === matchId);
     const codesKnown = !!(fresh.homeTeamCode && fresh.awayTeamCode);
@@ -646,23 +637,6 @@ export function buildKnockoutFromGroup(
     const id = `R32-${i + 1}`;
     const prev = existing?.r32?.find((p) => p.matchId === id);
     const fresh = emptyPick(id, "ROUND_OF_32", seed.home, seed.away);
-
-    // If the real match finished, bake its score into the pick so downstream
-    // rounds (R16) can derive the winner without needing a user-entered score.
-    const realKey = knockoutIdentityKey("ROUND_OF_32", fresh.homeTeamCode, fresh.awayTeamCode);
-    const realMatch = realKey
-      ? realKnockoutMatches?.find((m) => {
-          const k = knockoutIdentityKey(m.stage, m.home.code, m.away.code);
-          return k === realKey;
-        })
-      : undefined;
-    if (realMatch?.status === "FINISHED" && realMatch.score?.fullTime) {
-      const ft = realMatch.score.fullTime;
-      const pen = realMatch.score.penalties;
-      let penWinner: "home" | "away" | null = null;
-      if (pen) penWinner = pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null;
-      return { ...fresh, home: ft.home, away: ft.away, penaltyWinner: penWinner };
-    }
 
     if (
       prev &&
@@ -801,21 +775,16 @@ export function patchKnockoutWithRealFixtures(
     if (!real) return pick;
     const hCode = real.home.code || pick.homeTeamCode;
     const aCode = real.away.code || pick.awayTeamCode;
-    const patched: KnockoutPick = {
+    // Only update team codes/names; preserve the user's predicted score so the
+    // results page can compare "Tú vs Real" correctly. The predict page already
+    // shows real scores via the client-side knockoutRealScores map for locked cards.
+    return {
       ...pick,
       homeTeamCode: hCode,
       homeTeamName: real.home.code ? real.home.name : pick.homeTeamName,
       awayTeamCode: aCode,
       awayTeamName: real.away.code ? real.away.name : pick.awayTeamName,
     };
-    if (real.status === "FINISHED" && real.score?.fullTime) {
-      const ft = real.score.fullTime;
-      const pen = real.score.penalties;
-      const penWinner: "home" | "away" | null =
-        pen ? (pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null) : null;
-      return { ...patched, home: ft.home, away: ft.away, penaltyWinner: penWinner };
-    }
-    return patched;
   }
 
   return {

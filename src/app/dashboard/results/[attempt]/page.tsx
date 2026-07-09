@@ -9,7 +9,7 @@ import { clearSession, readSession, type Session } from "@/lib/session";
 // Type-only import: erased at compile time, so the "server-only" guard
 // inside scoring.ts never runs in the browser bundle.
 import type { AttemptScore } from "@/lib/scoring";
-import { displayTeam, flagUrl, normalizeTeam } from "@/lib/team-display";
+import { displayTeam, normalizeTeam } from "@/lib/team-display";
 import type { KnockoutPick, PredictionDoc } from "@/lib/types";
 
 const MERQUE_LOGO = "/logos/merquellantas.png";
@@ -110,15 +110,6 @@ export default function ResultsPage() {
           (m.status === "FINISHED" || m.status === "IN_PLAY"),
       ),
     [matches],
-  );
-
-  const knockoutHitSets = useMemo(
-    () => ({
-      ROUND_OF_16: new Set(score?.knockoutHits.r16 ?? []),
-      QUARTER_FINALS: new Set(score?.knockoutHits.qf ?? []),
-      SEMI_FINALS: new Set(score?.knockoutHits.sf ?? []),
-    }),
-    [score],
   );
 
   // Real knockout fixtures indexed two ways so we can find the result for any
@@ -434,105 +425,130 @@ export default function ResultsPage() {
               <h2 className="border-b border-[var(--foreground)] pb-2 font-mono text-xs font-bold uppercase tracking-[0.3em]">
                 Eliminatorias (tu llave)
               </h2>
-              <div className="mt-6 grid gap-8">
+              <div className="mt-6 grid gap-10">
                 {(
                   [
-                    { stage: "ROUND_OF_32" as const, picks: prediction.knockout.r32 },
-                    { stage: "ROUND_OF_16" as const, picks: prediction.knockout.r16 },
-                    { stage: "QUARTER_FINALS" as const, picks: prediction.knockout.qf },
-                    { stage: "SEMI_FINALS" as const, picks: prediction.knockout.sf },
+                    { stage: "ROUND_OF_32" as const, picks: prediction.knockout.r32, scored: false },
+                    { stage: "ROUND_OF_16" as const, picks: prediction.knockout.r16, scored: true },
+                    { stage: "QUARTER_FINALS" as const, picks: prediction.knockout.qf, scored: true },
+                    { stage: "SEMI_FINALS" as const, picks: prediction.knockout.sf, scored: true },
+                    ...(prediction.knockout.third
+                      ? [{ stage: "THIRD_PLACE" as const, picks: [prediction.knockout.third], scored: true }]
+                      : []),
+                    ...(prediction.knockout.final
+                      ? [{ stage: "FINAL" as const, picks: [prediction.knockout.final], scored: true }]
+                      : []),
                   ] as const
-                ).map(({ stage, picks }) => {
-                  if (!picks.length) return null;
-                  const isScored = stage !== "ROUND_OF_32";
+                ).map(({ stage, picks, scored }) => {
+                  const visiblePicks = picks.filter((p) => p.homeTeamCode && p.awayTeamCode);
+                  if (!visiblePicks.length) return null;
                   return (
                     <div key={stage}>
-                      <h3 className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.3em]">
+                      <h3 className="mb-3 border-b border-[var(--foreground)] pb-2 font-mono text-xs font-bold uppercase tracking-[0.3em]">
                         {STAGE_TITLES[stage]}
-                        {isScored && (
+                        {scored ? (
                           <span className="ml-3 font-normal text-[var(--foreground-muted)]">
                             · máx 125 pts/partido
                           </span>
+                        ) : (
+                          <span className="ml-3 font-normal text-[var(--foreground-muted)]">
+                            · sin puntos
+                          </span>
                         )}
                       </h3>
-                      <ul className="grid gap-3 md:grid-cols-2">
-                        {picks.filter((p) => p.homeTeamCode && p.awayTeamCode).map((p) => {
+                      <ul className="grid gap-3">
+                        {visiblePicks.map((p) => {
                           const h = displayTeam(p.homeTeamCode, p.homeTeamName);
                           const a = displayTeam(p.awayTeamCode, p.awayTeamName);
-                          const isHit =
-                            isScored && knockoutHitSets[stage]?.has(p.matchId);
-                          const pts = isScored
+                          const pts = scored
                             ? (score?.breakdown.knockout?.byMatch[p.matchId] ?? null)
                             : null;
                           const realMatch = findRealMatch(p.matchId, stage, p.homeTeamCode, p.awayTeamCode);
                           const realFt = realMatch?.score?.fullTime ?? null;
+                          const userPredicted = p.home != null && p.away != null;
+                          const cardClass =
+                            scored && realFt && userPredicted
+                              ? (pts ?? 0) > 0
+                                ? "border-emerald-600 bg-emerald-50"
+                                : "border-red-400 bg-red-50"
+                              : "border-[var(--line)] bg-white";
                           return (
                             <li
                               key={p.matchId}
-                              className={`relative border p-4 ${
-                                pts != null && pts > 0
-                                  ? "border-emerald-600 bg-emerald-50"
-                                  : isHit
-                                    ? "border-amber-500 bg-amber-50"
-                                    : "border-[var(--line)] bg-white"
-                              }`}
+                              className={`grid grid-cols-1 items-center gap-3 border p-4 md:grid-cols-[1fr_auto_1fr_auto] ${cardClass}`}
                             >
-                              {pts != null && (
-                                <span className={`absolute -top-2 right-2 border px-2 py-0.5 font-mono text-[10px] font-black tabular-nums tracking-normal ${
-                                  pts > 0
-                                    ? "border-emerald-600 bg-emerald-100 text-emerald-800"
-                                    : "border-[var(--line)] bg-white text-[var(--foreground-muted)]"
-                                }`}>
-                                  +{pts} pts
+                              <div className="flex items-center justify-end gap-3 md:text-right">
+                                <span className="text-base font-bold uppercase tracking-tight">
+                                  {h.name || "—"}
                                 </span>
-                              )}
-                              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                                <div className="flex items-center justify-end gap-2 text-right text-sm font-bold uppercase tracking-tight">
-                                  <span>{h.name || "—"}</span>
-                                  {h.crest && (
-                                    /* eslint-disable-next-line @next/next/no-img-element */
-                                    <img
-                                      src={h.crest}
-                                      alt=""
-                                      aria-hidden
-                                      className="h-6 w-9 shrink-0 border border-[var(--line)] object-cover"
-                                    />
-                                  )}
+                                {h.crest && (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img
+                                    src={h.crest}
+                                    alt=""
+                                    aria-hidden
+                                    className="h-9 w-12 shrink-0 border border-[var(--line)] object-cover"
+                                  />
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3 text-center font-mono text-sm">
+                                <div>
+                                  <div className="text-[9px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
+                                    Tú
+                                  </div>
+                                  <div className="mt-1 text-2xl font-black tabular-nums">
+                                    {userPredicted
+                                      ? `${p.home}–${p.away}${p.penaltyWinner ? " pen" : ""}`
+                                      : "—"}
+                                  </div>
                                 </div>
-                                <div className="text-center font-mono font-black tabular-nums">
-                                  {realFt ? (
-                                    <div className="space-y-0.5">
-                                      <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">Tú</div>
-                                      <div className="text-base">
-                                        {p.home != null && p.away != null
-                                          ? `${p.home}–${p.away}${p.penaltyWinner ? " pen" : ""}`
-                                          : "—"}
-                                      </div>
-                                      <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">Real</div>
-                                      <div className="text-base">
-                                        {`${realFt.home}–${realFt.away}${realMatch?.score?.penalties ? " pen" : ""}`}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <span className="text-lg">
-                                      {p.home != null && p.away != null
-                                        ? `${p.home}–${p.away}${p.penaltyWinner ? " (pen)" : ""}`
-                                        : "—"}
-                                    </span>
-                                  )}
+                                <div>
+                                  <div className="text-[9px] uppercase tracking-[0.28em] text-[var(--foreground-muted)]">
+                                    Real
+                                  </div>
+                                  <div className="mt-1 text-2xl font-black tabular-nums">
+                                    {realFt
+                                      ? `${realFt.home}–${realFt.away}${realMatch?.score?.penalties ? " pen" : ""}`
+                                      : "—"}
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-tight">
-                                  {a.crest && (
-                                    /* eslint-disable-next-line @next/next/no-img-element */
-                                    <img
-                                      src={a.crest}
-                                      alt=""
-                                      aria-hidden
-                                      className="h-6 w-9 shrink-0 border border-[var(--line)] object-cover"
-                                    />
-                                  )}
-                                  <span>{a.name || "—"}</span>
-                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                {a.crest && (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img
+                                    src={a.crest}
+                                    alt=""
+                                    aria-hidden
+                                    className="h-9 w-12 shrink-0 border border-[var(--line)] object-cover"
+                                  />
+                                )}
+                                <span className="text-base font-bold uppercase tracking-tight">
+                                  {a.name || "—"}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-3 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--foreground-muted)] md:flex-col md:items-end md:gap-1">
+                                <span>
+                                  {realFt
+                                    ? "Final"
+                                    : realMatch?.status === "IN_PLAY"
+                                      ? "En juego"
+                                      : "Pendiente"}
+                                </span>
+                                {scored && realFt && (
+                                  <span
+                                    className={`border px-2 py-0.5 text-[11px] font-black tabular-nums tracking-normal ${
+                                      (pts ?? 0) > 0
+                                        ? "border-emerald-600 bg-emerald-100 text-emerald-800"
+                                        : "border-[var(--line)] bg-white text-[var(--foreground-muted)]"
+                                    }`}
+                                  >
+                                    +{pts ?? 0} pts
+                                  </span>
+                                )}
                               </div>
                             </li>
                           );
@@ -541,94 +557,6 @@ export default function ResultsPage() {
                     </div>
                   );
                 })}
-
-                {(prediction.knockout.third || prediction.knockout.final) && (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {(["third", "final"] as const).map((key) => {
-                      const p = prediction.knockout[key];
-                      if (!p) return null;
-                      const h = displayTeam(p.homeTeamCode, p.homeTeamName);
-                      const a = displayTeam(p.awayTeamCode, p.awayTeamName);
-                      const stage = key === "third" ? "THIRD_PLACE" : "FINAL";
-                      const pts = score?.breakdown.knockout?.byMatch[p.matchId] ?? null;
-                      const realMatch = findRealMatch(p.matchId, stage, p.homeTeamCode, p.awayTeamCode);
-                      const realFt = realMatch?.score?.fullTime ?? null;
-                      return (
-                        <div key={key}>
-                          <h3 className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.3em]">
-                            {STAGE_TITLES[stage]}
-                            <span className="ml-3 font-normal text-[var(--foreground-muted)]">
-                              · máx 125 pts
-                            </span>
-                          </h3>
-                          <div className={`relative border p-4 ${
-                            pts != null && pts > 0
-                              ? "border-emerald-600 bg-emerald-50"
-                              : "border-[var(--line)] bg-white"
-                          }`}>
-                            {pts != null && (
-                              <span className={`absolute -top-2 right-2 border px-2 py-0.5 font-mono text-[10px] font-black tabular-nums tracking-normal ${
-                                pts > 0
-                                  ? "border-emerald-600 bg-emerald-100 text-emerald-800"
-                                  : "border-[var(--line)] bg-white text-[var(--foreground-muted)]"
-                              }`}>
-                                +{pts} pts
-                              </span>
-                            )}
-                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                              <div className="flex items-center justify-end gap-2 text-right text-sm font-bold uppercase tracking-tight">
-                                <span>{h.name || "—"}</span>
-                                {h.crest && (
-                                  /* eslint-disable-next-line @next/next/no-img-element */
-                                  <img
-                                    src={h.crest}
-                                    alt=""
-                                    aria-hidden
-                                    className="h-6 w-9 shrink-0 border border-[var(--line)] object-cover"
-                                  />
-                                )}
-                              </div>
-                              <div className="text-center font-mono font-black tabular-nums">
-                                {realFt ? (
-                                  <div className="space-y-0.5">
-                                    <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">Tú</div>
-                                    <div className="text-base">
-                                      {p.home != null && p.away != null
-                                        ? `${p.home}–${p.away}${p.penaltyWinner ? " pen" : ""}`
-                                        : "—"}
-                                    </div>
-                                    <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground-muted)]">Real</div>
-                                    <div className="text-base">
-                                      {`${realFt.home}–${realFt.away}${realMatch?.score?.penalties ? " pen" : ""}`}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-lg">
-                                    {p.home != null && p.away != null
-                                      ? `${p.home}–${p.away}${p.penaltyWinner ? " (pen)" : ""}`
-                                      : "—"}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-tight">
-                                {a.crest && (
-                                  /* eslint-disable-next-line @next/next/no-img-element */
-                                  <img
-                                    src={a.crest}
-                                    alt=""
-                                    aria-hidden
-                                    className="h-6 w-9 shrink-0 border border-[var(--line)] object-cover"
-                                  />
-                                )}
-                                <span>{a.name || "—"}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
 
                 {prediction.champion && (
                   <div className="border-l-4 border-[var(--brand)] bg-[var(--brand-soft)] p-8">
