@@ -798,6 +798,47 @@ export function patchKnockoutWithRealFixtures(
 }
 
 /**
+ * Overwrite each pick's home/away/penaltyWinner with the official result for
+ * any FINISHED knockout fixture. Called AFTER scorePredictions (so the user's
+ * actual predictions drive scoring), then the baked version is returned to the
+ * client so the predict page shows real results on locked cards even when the
+ * client-side knockoutRealScores map has a data gap.
+ */
+export function bakeKnockoutScores(
+  knockout: PredictionDoc["knockout"],
+  realKnockoutMatches: MatchDoc[],
+): PredictionDoc["knockout"] {
+  const byId = new Map<string, MatchDoc>();
+  for (const m of realKnockoutMatches) {
+    const src = m.externalId ?? (/^wiki-(.+)$/.exec(m._id)?.[1] ?? null);
+    if (!src) continue;
+    const id = externalIdToMatchId(src);
+    if (id) byId.set(id, m);
+  }
+  if (byId.size === 0) return knockout;
+
+  function bake(pick: KnockoutPick): KnockoutPick {
+    const real = byId.get(pick.matchId);
+    if (!real || real.status !== "FINISHED" || !real.score?.fullTime) return pick;
+    const ft = real.score.fullTime;
+    const pen = real.score.penalties;
+    const penWinner: "home" | "away" | null = pen
+      ? (pen.home > pen.away ? "home" : pen.away > pen.home ? "away" : null)
+      : null;
+    return { ...pick, home: ft.home, away: ft.away, penaltyWinner: penWinner };
+  }
+
+  return {
+    r32: knockout.r32.map(bake),
+    r16: knockout.r16.map(bake),
+    qf: knockout.qf.map(bake),
+    sf: knockout.sf.map(bake),
+    third: knockout.third ? bake(knockout.third) : null,
+    final: knockout.final ? bake(knockout.final) : null,
+  };
+}
+
+/**
  * Guarantee that every round has the right number of pick slots.
  * Called after bracket building so the client always sees a full structure
  * and knockoutOpen stays true even before group standings are known.

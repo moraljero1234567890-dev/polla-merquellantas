@@ -50,10 +50,13 @@ export default function ResultsPage() {
   const params = useParams<{ attempt: string }>();
   const attemptNum = Number(params.attempt);
 
+  type RawPick = { home: number | null; away: number | null; penaltyWinner: "home" | "away" | null };
+
   const [session, setSession] = useState<Session | null>(null);
   const [matches, setMatches] = useState<MatchWithScore[]>([]);
   const [prediction, setPrediction] = useState<PredictionDoc | null>(null);
   const [score, setScore] = useState<AttemptScore | null>(null);
+  const [rawKnockoutPicks, setRawKnockoutPicks] = useState<Record<string, RawPick>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +87,7 @@ export default function ResultsPage() {
         setMatches(arr.length ? arr : staticFallback());
         setPrediction(p.prediction);
         setScore(p.score ?? null);
+        setRawKnockoutPicks(p.rawKnockoutPicks ?? {});
         setError(null);
       })
       .catch(() => {
@@ -465,7 +469,12 @@ export default function ResultsPage() {
                             : null;
                           const realMatch = findRealMatch(p.matchId, stage, p.homeTeamCode, p.awayTeamCode);
                           const realFt = realMatch?.score?.fullTime ?? null;
-                          const userPredicted = p.home != null && p.away != null;
+                          // Use the raw (pre-bake) pick for "Tú" — prediction.knockout has
+                          // real scores baked in for locked matches so the predict page bracket
+                          // shows official results; rawKnockoutPicks preserves what the user
+                          // actually predicted for this comparison view.
+                          const raw = rawKnockoutPicks[p.matchId];
+                          const userPredicted = raw?.home != null && raw?.away != null;
                           const cardClass =
                             scored && realFt && userPredicted
                               ? (pts ?? 0) > 0
@@ -499,7 +508,7 @@ export default function ResultsPage() {
                                   </div>
                                   <div className="mt-1 text-2xl font-black tabular-nums">
                                     {userPredicted
-                                      ? `${p.home}–${p.away}${p.penaltyWinner ? " pen" : ""}`
+                                      ? `${raw.home}–${raw.away}${raw.penaltyWinner ? " pen" : ""}`
                                       : "—"}
                                   </div>
                                 </div>

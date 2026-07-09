@@ -20,6 +20,7 @@ import {
   computeGroupStandings,
   ensureKnockoutSlots,
   isGroupStageComplete,
+  bakeKnockoutScores,
   patchKnockoutWithRealFixtures,
   realGroupStandings,
 } from "@/lib/bracket";
@@ -188,19 +189,33 @@ export async function GET(
     );
   }
   const stored = await loadOrCreate(email, attempt);
-  // Refresh fixture data (throttled to ≤1 Wikipedia call/min) before
-  // recomputing the bracket so new knockout fixtures are available.
   await refreshMatchScores();
-  // Rebuild the knockout bracket from the current group picks so it always
-  // reflects the official fixtures, even for predictions saved earlier.
+  // Rebuild bracket: correct team codes, user's original predicted scores.
   const prediction = await recomputeKnockout(stored);
-  // Score the recomputed prediction (which has real team codes from
-  // patchKnockoutWithRealFixtures) rather than the raw DB copy, so knockout
-  // scoring correctly matches picks to real fixtures via identity key.
   const matches = await getAllMatches();
+  const knockoutMatches = matches.filter((m) => m.stage !== "GROUP_STAGE");
+
+  // Score using the user's actual predicted scores (before baking real results).
   const scores = scorePredictions(matches, [prediction]);
   const score = scores.get(prediction._id) ?? emptyAttemptScore();
-  return NextResponse.json({ prediction, score });
+
+  // Snapshot user's predicted scores by matchId so the results page can show
+  // "Tú" correctly after we bake official results into the prediction below.
+  type RawPick = { home: number | null; away: number | null; penaltyWinner: "home" | "away" | null };
+  const rawKnockoutPicks: Record<string, RawPick> = {};
+  const allPickArrays = [prediction.knockout.r32, prediction.knockout.r16, prediction.knockout.qf, prediction.knockout.sf];
+  for (const arr of allPickArrays) {
+    for (const p of arr) rawKnockoutPicks[p.matchId] = { home: p.home, away: p.away, penaltyWinner: p.penaltyWinner };
+  }
+  for (const p of [prediction.knockout.third, prediction.knockout.final]) {
+    if (p) rawKnockoutPicks[p.matchId] = { home: p.home, away: p.away, penaltyWinner: p.penaltyWinner };
+  }
+
+  // Bake official results into finished slots so the predict page bracket always
+  // shows the real score on locked cards (pick.home = official result).
+  const displayPrediction = { ...prediction, knockout: bakeKnockoutScores(prediction.knockout, knockoutMatches) };
+
+  return NextResponse.json({ prediction: displayPrediction, score, rawKnockoutPicks });
 }
 
 type PostBody =
