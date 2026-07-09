@@ -229,8 +229,8 @@ function ScoreInput({
   }, [value]);
   const sizeCls =
     size === "sm"
-      ? "h-9 w-9 text-base"
-      : "h-12 w-14 text-xl";
+      ? "h-8 w-8 text-sm"
+      : "h-11 w-12 text-lg";
   return (
     <input
       type="number"
@@ -499,7 +499,7 @@ function BracketCard({
     return (
       <div
         className={
-          "flex items-center justify-between gap-2 px-2 py-1.5 " +
+          "flex items-center justify-between gap-2 px-2 py-1 " +
           (isWinner
             ? "bg-[var(--brand-soft)] "
             : isLoser
@@ -1482,8 +1482,8 @@ export default function PredictPage() {
                   </p>
                   <div className="overflow-x-auto pb-6">
                     <div
-                      className="flex gap-6"
-                      style={{ minHeight: 1500 }}
+                      className="flex gap-4"
+                      style={{ minHeight: 480 }}
                     >
                       {(
                         [
